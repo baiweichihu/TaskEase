@@ -103,52 +103,39 @@ npm run dev
 
 ## Database Initialization
 
-### Step 1: Enable Email Authentication
+### Supabase Setup
 
-1. **In Supabase console, go to:** Authentication → Providers
-2. **Verify "Email" is enabled**
-   - Toggle should be ON (blue)
-   - If OFF, click to enable
+1. **Create Supabase Account**
+   - Visit [supabase.com](https://supabase.com)
+   - Sign up for free account
+   - Create new project
 
-### Step 2: Run Migration Scripts
+2. **Configure Environment**
+   - Copy `.env.example` to `.env`
+   - Add your Supabase URL and anon key:
+   ```
+   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key-here
+   ```
 
-**Warning:** Only run these once per project. Running multiple times is safe but unnecessary.
+3. **Execute Database Script**
+   - In Supabase dashboard, go to SQL Editor
+   - Execute `supabase/complete_database_setup.sql`
+   - This creates tables, RLS policies, and sample data
 
-#### 2a. Run Todos Table Migration
+4. **Fix RLS Policies (If Needed)**
+   - If you encounter "new row violates row-level security policy" errors
+   - Execute `supabase/fix_rls_policies.sql` to fix username modification issues
 
-1. **In Supabase console, go to:** SQL Editor
-2. **Create new query** (click "+ New Query")
-3. **Copy and paste** contents of `supabase/todos_status_migration.sql`
-4. **Click "Run"** and wait for completion (you should see "success" message)
+### Database Schema
 
-**What this does:**
-- Adds `status` column to `todos` table (default: 'pending')
-- Backfills existing `completed` boolean to `status` values
-- Adds `estimated_hours`, `ddl`, `priority`, `label`, `remark` columns
-- Creates database indices for performance
+TaskEase uses three main tables:
 
-#### 2b. Run User Preferences Table Creation
+- **profiles**: User profile information
+- **todos**: Task management
+- **user_preferences**: User settings and preferences
 
-1. **Create another new query**
-2. **Copy and paste** contents of `supabase/user_preferences.sql`
-3. **Click "Run"** and wait for completion
-
-**What this does:**
-- Creates new `user_preferences` table
-- Sets up RLS (Row-Level Security) policies
-- Adds auto-update trigger for `updated_at` timestamp
-- Creates index on `user_id` for query performance
-
-### Step 3: Verify Tables
-
-1. **In Supabase console, go to:** Table Editor
-2. **Check that both tables exist:**
-   - `todos` (should have new columns)
-   - `user_preferences` (should be empty initially)
-
-3. **Optional: Check RLS is enabled**
-   - Click on each table
-   - Check that RLS toggle is ON (blue)
+All tables have Row Level Security (RLS) enabled for data protection.
 
 ---
 

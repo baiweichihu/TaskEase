@@ -1,12 +1,109 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import {
+  Header,
+  TaskManager,
+  AuthModal,
+  AddTaskModal,
+  PlanWorkModal,
+  ProfileSettingsModal,
+  Toast,
+  ConfirmModal,
+} from "./components";
+
+// OTP验证模态框组件
+function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVerify, pageBg }) {
+  if (!isOpen) return null;
+
+  const customInputStyle = {
+    backgroundColor: "#faefdf",
+    borderColor: "#e9bd34",
+    color: "#2b2b2b",
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div 
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          zIndex: 1040,
+          animation: "fadeIn 0.3s ease-in-out",
+        }}
+      />
+      {/* Modal */}
+      <div 
+        className="modal d-block" 
+        tabIndex="-1"
+        style={{
+          animation: "slideDown 0.4s ease-out",
+          zIndex: 1050,
+        }}
+      >
+        <style>{`
+          @keyframes slideDown {
+            from {
+              transform: translateY(-50px);
+              opacity: 0;
+            }
+            to {
+              transform: translateY(0);
+              opacity: 1;
+            }
+          }
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+        `}</style>
+        <div className="modal-dialog" style={{ marginTop: "60px" }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg }}>
+            <div className="modal-header">
+              <h2 className="modal-title fs-6">{t.otpModalTitle}</h2>
+              <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
+            </div>
+            <div className="modal-body">
+              <div className="mb-3">
+                <p className="small text-body-secondary">
+                  {t.otpSentIntro} <strong>{otpEmail}</strong> {t.otpSentOutro}
+                </p>
+              </div>
+              <form className="d-grid gap-2" onSubmit={onOtpVerify}>
+                <input 
+                  className="form-control" 
+                  type="text" 
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder={t.otpCodePlaceholder} 
+                  value={otpCode} 
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  style={customInputStyle}
+                  required 
+                />
+                <button className="btn btn-warning text-dark" type="submit">{t.otpVerify}</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 const SUPABASE_URL = "https://ccfmbcvlmlvirkattqnv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_XO9o2kqTKkcnHmGEqCmOoQ_vcNyBGk9";
 const TODO_TABLE = "todos";
 const PROFILE_TABLE = "profiles";
 const PREFERENCES_TABLE = "user_preferences";
-const USERNAME_DOMAIN = "users.taskease.app";
 
 const STATUS_PENDING = "pending";
 const STATUS_DONE = "done";
@@ -15,6 +112,8 @@ const GUEST_KEY = "taskease_todos_guest";
 const THEME_KEY = "taskease_theme_mode";
 const LANG_KEY = "taskease_lang";
 const CLOCK_KEY = "taskease_clock_format";
+const PENDING_USERNAME_KEY_PREFIX = "taskease_pending_username_";
+const GUEST_LABELS_KEY = "taskease_task_labels_guest";
 
 const TEXT = {
   "zh-CN": {
@@ -28,6 +127,7 @@ const TEXT = {
     login: "登录",
     account: "账号",
     register: "注册",
+    email: "邮箱",
     username: "用户名",
     password: "密码",
     confirmPassword: "确认密码",
@@ -57,15 +157,80 @@ const TEXT = {
     batchUpdateRollback: "批量更新失败，已回滚。",
     batchDeleteRollback: "批量删除失败，已回滚。",
     supabaseMissing: "Supabase 未连接。",
-    invalidLogin: "请输入有效用户名和密码。",
-    loginFailed: "登录失败，请检查用户名或密码。",
-    invalidUsername: "用户名需为 3-32 位字母/数字/下划线。",
+    invalidLogin: "请输入有效邮箱和密码。",
+    loginFailed: "登录失败，请检查邮箱或密码。",
+    invalidEmail: "请输入有效邮箱地址。",
+    invalidUsername: "用户名需为 1-15 个字符，可包含中文、大小写和任意符号。",
     shortPassword: "密码至少 6 位。",
     passwordMismatch: "两次密码不一致。",
     usernameTaken: "用户名已存在。",
     registerFailed: "注册失败",
     registerSuccess: "注册成功。",
-    registerNeedEmailCfg: "注册成功，请检查 Supabase 邮箱确认配置。",
+    registerNeedEmailCfg: "验证码已发送到邮箱，请输入邮件中的 6 位验证码完成注册。",
+    otpModalTitle: "邮箱验证",
+    otpSentIntro: "验证码已发送至",
+    otpSentOutro: "，请输入邮件中的 6 位验证码。",
+    otpCodePlaceholder: "6 位验证码",
+    otpVerify: "验证",
+    otpInvalid: "请输入邮箱验证码。",
+    otpFailed: "验证码无效或已过期",
+    registerVerified: "邮箱验证成功，已登录。",
+    authRateLimitHint: "验证邮件发送过于频繁，请稍后再试。",
+    cancel: "取消",
+    addTaskSubmit: "添加",
+    addFieldTitle: "标题",
+    planWork: "自动规划",
+    planWorkTitle: "工作时间自动规划",
+    planAvailableHours: "接下来可工作的时长（小时）",
+    planHoursPlaceholder: "例如：2.5",
+    planGenerate: "生成建议",
+    planInvalidHours: "请输入大于 0 的可用时长（小时）。",
+    planNoActiveTasks: "没有可参与自动规划的任务：请至少在「预计小时」「截止时间」「优先级」中填写一项。",
+    planSummary: "仅包含至少填写了预计时长、截止或优先级之一的进行中任务；已按截止时间、优先级与（或推测的）工时排序，建议如下：",
+    planNothingPacked: "未能安排任何任务，请检查可用时长或任务列表。",
+    planSuggestWork: "建议投入",
+    planFullEstimate: "预计总需",
+    planInferredHours: "工时为推测值（无预计时长时根据截止/优先级估算）",
+    planPartial: "本时段内时间不足以完成全部",
+    planTimeRemaining: "尚未分配完的剩余时间",
+    emptyTitle: "请填写任务标题。",
+    editTask: "编辑任务",
+    saveChanges: "保存",
+    addTaskHintTitle: "添加任务规则说明",
+    addTaskHint: "· 标题为必填项。\n· 预计小时、截止时间、优先级均为选填。\n· 若以上三项全部留空，自动规划不会纳入该任务。\n· 仅填部分字段时，规划会结合已有信息并推测所需工时。",
+    tagSearchPlaceholder: "搜索或选择标签",
+    tagAddNew: "＋新增",
+    newTagPrompt: "新标签名称",
+    tagNone: "（未选）",
+    tagSelected: "当前标签",
+    tagClear: "清除",
+    tagPickHint: "点击选用",
+    optionalPlaceholder: "选填",
+    progress: "进度",
+    remHours: "预计剩余",
+    remarkPrefix: "备注：",
+    taskComplete: "完成",
+    taskCompletedState: "已完成",
+    deleteTask: "删除任务",
+    confirmDeleteTitle: "确认删除",
+    confirmDeleteMessage: "确定要删除该任务吗？此操作无法撤销。",
+    confirmDelete: "确认删除",
+    tagModalTitle: "新增标签",
+    tagModalConfirm: "添加",
+    planAlgorithmAria: "自动规划算法说明",
+    planAlgorithmHint:
+      "算法步骤：\n1. 只纳入「进行中」且预计时长、截止时间、优先级至少填写过一项的任务。\n2. 按截止时间从早到晚排序；无截止时间排在后面；同一截止时间内按优先级数字从大到小。\n3. 若未填预计时长，根据是否填写截止、优先级推测所需工时。\n4. 按上述顺序将任务依次装入你输入的可用时长，直至时间用完或没有可装任务。",
+    profileSettings: "个人资料设置",
+    updateEmail: "更改邮箱",
+    updateUsername: "更改用户名",
+    resetPassword: "重置密码",
+    updateEmailSuccess: "邮箱更新请求已发送，请前往邮箱确认。",
+    updateUsernameSuccess: "用户名更新成功。",
+    resetPasswordSent: "密码重置邮件已发送，请查收。",
+    usernameDbConstraintHint: "数据库仍在使用旧用户名规则，请先执行 supabase/profiles_username_constraint_migration.sql。",
+    usernameUnchanged: "用户名未变化。",
+    actionNeedLogin: "请先登录后再操作。",
+    requestTimeout: "请求超时，请重试。",
     loggedInAs: "已登录用户",
     editPrompt: "编辑任务",
     titlePlaceholder: "任务标题",
@@ -87,6 +252,7 @@ const TEXT = {
     login: "登入",
     account: "帳號",
     register: "註冊",
+    email: "電子郵件",
     username: "使用者名稱",
     password: "密碼",
     confirmPassword: "確認密碼",
@@ -116,15 +282,76 @@ const TEXT = {
     batchUpdateRollback: "批次更新失敗，已回滾。",
     batchDeleteRollback: "批次刪除失敗，已回滾。",
     supabaseMissing: "Supabase 未連線。",
-    invalidLogin: "請輸入有效使用者名稱與密碼。",
-    loginFailed: "登入失敗，請檢查使用者名稱或密碼。",
-    invalidUsername: "使用者名稱需為 3-32 位英數與底線。",
+    invalidLogin: "請輸入有效電子郵件與密碼。",
+    loginFailed: "登入失敗，請檢查電子郵件或密碼。",
+    invalidEmail: "請輸入有效電子郵件地址。",
+    invalidUsername: "使用者名稱需為 1-15 個字元，可包含中文、大小寫與任意符號。",
     shortPassword: "密碼至少 6 碼。",
     passwordMismatch: "兩次密碼不一致。",
     usernameTaken: "使用者名稱已存在。",
     registerFailed: "註冊失敗",
     registerSuccess: "註冊成功。",
-    registerNeedEmailCfg: "註冊成功，請檢查 Supabase 郵件確認設定。",
+    registerNeedEmailCfg: "驗證碼已傳送至電子郵件，請輸入郵件中的 6 位驗證碼完成註冊。",
+    otpModalTitle: "電子郵件驗證",
+    otpSentIntro: "驗證碼已傳送至",
+    otpSentOutro: "，請輸入郵件中的 6 位驗證碼。",
+    otpCodePlaceholder: "6 位驗證碼",
+    otpVerify: "驗證",
+    otpInvalid: "請輸入驗證碼。",
+    otpFailed: "驗證碼無效或已過期",
+    registerVerified: "電子郵件驗證成功，已登入。",
+    authRateLimitHint: "驗證郵件傳送過於頻繁，請稍後再試。",
+    cancel: "取消",
+    addTaskSubmit: "新增",
+    addFieldTitle: "標題",
+    planWork: "自動規劃",
+    planWorkTitle: "工作時間自動規劃",
+    planAvailableHours: "接下來可工作的時長（小時）",
+    planHoursPlaceholder: "例如：2.5",
+    planGenerate: "產生建議",
+    planInvalidHours: "請輸入大於 0 的可用時長（小時）。",
+    planNoActiveTasks: "沒有可參與自動規劃的任務：請至少在「預計小時」「截止時間」「優先級」中填寫一項。",
+    planSummary: "僅包含至少填寫了預計時長、截止或優先級之一的進行中任務；已依截止時間、優先級與（或推測的）工時排序，建議如下：",
+    planNothingPacked: "未能安排任何任務，請檢查可用時長或任務列表。",
+    planSuggestWork: "建議投入",
+    planFullEstimate: "預計總需",
+    planInferredHours: "工時為推測值（無預計時長時依截止/優先級估算）",
+    planPartial: "本時段內時間不足以完成全部",
+    planTimeRemaining: "尚未分配完的剩餘時間",
+    emptyTitle: "請填寫任務標題。",
+    editTask: "編輯任務",
+    saveChanges: "儲存",
+    addTaskHintTitle: "新增任務規則說明",
+    addTaskHint: "· 標題為必填。\n· 預計小時、截止時間、優先級皆為選填。\n· 若以上三項全部留空，自動規劃不會納入該任務。\n· 僅填部分欄位時，規劃會結合已有資訊並推測所需工時。",
+    tagSearchPlaceholder: "搜尋或選擇標籤",
+    tagAddNew: "＋新增",
+    newTagPrompt: "新標籤名稱",
+    tagNone: "（未選）",
+    progress: "進度",
+    remHours: "預計剩餘",
+    remarkPrefix: "備註：",
+    taskComplete: "完成",
+    taskCompletedState: "已完成",
+    deleteTask: "刪除任務",
+    confirmDeleteTitle: "確認刪除",
+    confirmDeleteMessage: "確定要刪除此任務嗎？此操作無法復原。",
+    confirmDelete: "確認刪除",
+    tagModalTitle: "新增標籤",
+    tagModalConfirm: "新增",
+    planAlgorithmAria: "自動規劃演算法說明",
+    planAlgorithmHint:
+      "演算法步驟：\n1. 只納入「進行中」且預計時長、截止時間、優先級至少填寫過一項的任務。\n2. 依截止時間由早到晚排序；無截止時間排在後面；同一截止時間內依優先級數字由大到小。\n3. 若未填預計時長，依是否填寫截止、優先級推測所需工時。\n4. 依上述順序將任務依次裝入你輸入的可用時長，直至時間用完或沒有可裝任務。",
+    profileSettings: "個人資料設定",
+    updateEmail: "變更電子郵件",
+    updateUsername: "變更使用者名稱",
+    resetPassword: "重設密碼",
+    updateEmailSuccess: "電子郵件更新請求已送出，請前往信箱確認。",
+    updateUsernameSuccess: "使用者名稱更新成功。",
+    resetPasswordSent: "密碼重設郵件已送出，請查收。",
+    usernameDbConstraintHint: "資料庫仍使用舊的使用者名稱規則，請先執行 supabase/profiles_username_constraint_migration.sql。",
+    usernameUnchanged: "使用者名稱未變更。",
+    actionNeedLogin: "請先登入後再操作。",
+    requestTimeout: "請求逾時，請重試。",
     loggedInAs: "已登入使用者",
     editPrompt: "編輯任務",
     titlePlaceholder: "任務標題",
@@ -146,6 +373,7 @@ const TEXT = {
     login: "Login",
     account: "Account",
     register: "Register",
+    email: "Email",
     username: "Username",
     password: "Password",
     confirmPassword: "Confirm Password",
@@ -175,15 +403,80 @@ const TEXT = {
     batchUpdateRollback: "Batch update failed and rolled back.",
     batchDeleteRollback: "Batch delete failed and rolled back.",
     supabaseMissing: "Supabase unavailable.",
-    invalidLogin: "Please enter a valid username and password.",
-    loginFailed: "Login failed. Check username/password.",
-    invalidUsername: "Username must be 3-32 chars: a-z, 0-9, _.",
+    invalidLogin: "Please enter a valid email and password.",
+    loginFailed: "Login failed. Check email/password.",
+    invalidEmail: "Please enter a valid email address.",
+    invalidUsername: "Username must be 1-15 characters. Any characters are allowed.",
     shortPassword: "Password must be at least 6 characters.",
     passwordMismatch: "Passwords do not match.",
     usernameTaken: "Username already exists.",
     registerFailed: "Registration failed",
     registerSuccess: "Registration successful.",
-    registerNeedEmailCfg: "Registered. Check Supabase email confirmation settings.",
+    registerNeedEmailCfg: "We sent a code to your email. Enter the 6-digit code from the email to finish signing up.",
+    otpModalTitle: "Email verification",
+    otpSentIntro: "We sent a code to",
+    otpSentOutro: ". Enter the 6-digit code from the email.",
+    otpCodePlaceholder: "6-digit code",
+    otpVerify: "Verify",
+    otpInvalid: "Please enter the verification code.",
+    otpFailed: "Invalid or expired code",
+    registerVerified: "Email verified. You are signed in.",
+    authRateLimitHint: "Too many verification emails were sent. Please wait and try again.",
+    cancel: "Cancel",
+    addTaskSubmit: "Add",
+    addFieldTitle: "Title",
+    planWork: "Auto plan",
+    planWorkTitle: "Plan your work session",
+    planAvailableHours: "Hours you can still work (h)",
+    planHoursPlaceholder: "e.g. 2.5",
+    planGenerate: "Build suggestions",
+    planInvalidHours: "Enter available hours greater than zero.",
+    planNoActiveTasks: "No tasks qualify for auto-plan: fill at least one of estimated hours, due date, or priority.",
+    planSummary: "Includes active tasks that have at least one of hours/due/priority set; ordered by due date, priority, and inferred or actual effort:",
+    planNothingPacked: "No tasks fit this window. Check the time budget or your task list.",
+    planSuggestWork: "Spend",
+    planFullEstimate: "Total estimate",
+    planInferredHours: "time is inferred when hours are missing (from due date / priority)",
+    planPartial: "not enough time to finish fully in this session",
+    planTimeRemaining: "Unused time in this budget",
+    emptyTitle: "Please enter a task title.",
+    editTask: "Edit task",
+    saveChanges: "Save",
+    addTaskHintTitle: "Rules for adding tasks",
+    addTaskHint: "· Title is required.\n· Estimated hours, due time, and priority are optional.\n· If all three are left empty, auto-plan will skip this task.\n· If only some are set, planning uses them and infers effort when needed.",
+    tagSearchPlaceholder: "Search or pick a label",
+    tagAddNew: "+ New",
+    newTagPrompt: "New label name",
+    tagNone: "(none)",
+    tagSelected: "Selected",
+    tagClear: "Clear",
+    tagPickHint: "Click to use",
+    optionalPlaceholder: "Optional",
+    progress: "Progress",
+    remHours: "Remaining est.",
+    remarkPrefix: "Note: ",
+    taskComplete: "Done",
+    taskCompletedState: "Completed",
+    deleteTask: "Delete task",
+    confirmDeleteTitle: "Delete task?",
+    confirmDeleteMessage: "This task will be removed permanently. This cannot be undone.",
+    confirmDelete: "Delete",
+    tagModalTitle: "New label",
+    tagModalConfirm: "Add",
+    planAlgorithmAria: "Auto-plan algorithm",
+    planAlgorithmHint:
+      "How it works:\n1. Only active tasks that have at least one of: estimated hours, due time, or priority.\n2. Sort by earliest due time first; tasks without a due time go last; tie-break by higher priority number.\n3. If hours are missing, infer duration from due time and/or priority.\n4. Greedily pack tasks into your available time budget in that order until time runs out.",
+    profileSettings: "Profile Settings",
+    updateEmail: "Change Email",
+    updateUsername: "Change Username",
+    resetPassword: "Reset Password",
+    updateEmailSuccess: "Email update request sent. Please confirm in your mailbox.",
+    updateUsernameSuccess: "Username updated successfully.",
+    resetPasswordSent: "Password reset email sent. Please check your mailbox.",
+    usernameDbConstraintHint: "Database is still using old username constraint. Please run supabase/profiles_username_constraint_migration.sql first.",
+    usernameUnchanged: "Username is unchanged.",
+    actionNeedLogin: "Please login first.",
+    requestTimeout: "Request timed out. Please try again.",
     loggedInAs: "Logged in as",
     editPrompt: "Edit task",
     titlePlaceholder: "Task title",
@@ -209,22 +502,67 @@ function buildSupabaseClient() {
 }
 
 function normalizeUsername(name) {
-  return String(name || "").trim().toLowerCase();
+  return String(name || "").trim();
 }
 
 function isValidUsername(name) {
-  return /^[a-z0-9_]{3,32}$/.test(name);
+  const value = String(name || "").trim();
+  const length = Array.from(value).length;
+  return length >= 1 && length <= 15;
 }
 
-function usernameToEmail(name) {
-  return `${name}@${USERNAME_DOMAIN}`;
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
+function isAuthRateLimitError(error) {
+  if (!error) return false;
+  const status = Number(error.status);
+  if (status === 429) return true;
+  const msg = String(error.message || "").toLowerCase();
+  const code = String(error.code || "").toLowerCase();
+  if (code.includes("over_email") || code.includes("rate") || code === "too_many_requests") return true;
+  if (
+    msg.includes("rate limit") ||
+    msg.includes("too many requests") ||
+    msg.includes("too many") ||
+    msg.includes("email rate limit") ||
+    msg.includes("seconds before") ||
+    msg.includes("security purposes")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isTransientLockError(error) {
+  const message = String(error?.message || "");
+  return message.includes("Lock broken by another request") || message.includes("AbortError");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout(promise, ms = 10000) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
 function readLocalTodos(key) {
   try {
     const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => ({
+      ...item,
+      progress_percent: snapProgress(item?.progress_percent),
+      estimated_hours: Number(item?.estimated_hours ?? 0),
+      priority: Number(item?.priority ?? 0),
+    }));
   } catch {
     return [];
   }
@@ -234,8 +572,57 @@ function writeLocalTodos(key, todos) {
   localStorage.setItem(key, JSON.stringify(todos));
 }
 
+function getPendingUsernameByEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return "";
+  return localStorage.getItem(`${PENDING_USERNAME_KEY_PREFIX}${normalized}`) || "";
+}
+
+function setPendingUsernameByEmail(email, username) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const normalizedUsername = String(username || "").trim();
+  if (!normalizedEmail || !normalizedUsername) return;
+  localStorage.setItem(`${PENDING_USERNAME_KEY_PREFIX}${normalizedEmail}`, normalizedUsername);
+}
+
+function clearPendingUsernameByEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return;
+  localStorage.removeItem(`${PENDING_USERNAME_KEY_PREFIX}${normalized}`);
+}
+
+function snapProgress(v) {
+  const x = Number(v);
+  if (!Number.isFinite(x)) return 0;
+  const c = Math.round(x / 10) * 10;
+  return Math.max(0, Math.min(100, c));
+}
+
+function toDatetimeLocalValue(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function parseTaskLabels(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map((x) => String(x).trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function mapTodo(row) {
-  const status = row.status ?? (row.completed ? STATUS_DONE : STATUS_PENDING);
+  const status = row.status ?? STATUS_PENDING;
   return {
     id: row.id,
     title: row.title || "",
@@ -245,6 +632,7 @@ function mapTodo(row) {
     remark: row.remark ?? "",
     priority: Number(row.priority ?? 0),
     label: row.label ?? "",
+    progress_percent: snapProgress(row.progress_percent ?? 0),
     user_id: row.user_id,
     created_at: row.created_at,
   };
@@ -281,18 +669,24 @@ export default function App() {
   const [resolvedTheme, setResolvedTheme] = useState("light");
   const [now, setNow] = useState(() => new Date());
 
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const settingsRef = useRef(null);
-
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isPlanWorkModalOpen, setIsPlanWorkModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  const [loginUsername, setLoginUsername] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [registerUsername, setRegisterUsername] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
+
+  // OTP验证相关状态
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
 
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
@@ -305,12 +699,18 @@ export default function App() {
 
   const [draft, setDraft] = useState({
     title: "",
-    estimated_hours: "0.5",
+    estimated_hours: "",
     ddl: "",
     label: "",
-    priority: "0",
+    priority: "",
     remark: "",
   });
+
+  const [editingTodoId, setEditingTodoId] = useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [taskLabels, setTaskLabels] = useState([]);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const previousUserIdRef = useRef(null);
 
   const [todos, setTodos] = useState([]);
 
@@ -369,16 +769,6 @@ export default function App() {
   }, [themeMode]);
 
   useEffect(() => {
-    const onDown = (event) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
-        setIsSettingsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
-
-  useEffect(() => {
     if (!supabase) {
       notify(t.localOnly, true);
       setTodos(readLocalTodos(storageKey));
@@ -397,7 +787,6 @@ export default function App() {
       setUser(current);
       if (!current) {
         setUsername("");
-        notify(t.notLoginLocal, true);
         setTodos(readLocalTodos(GUEST_KEY));
       }
     }
@@ -413,10 +802,16 @@ export default function App() {
       setBatchMode(false);
 
       if (!current) {
+        setPreferencesLoaded(false);
         setUsername("");
         setTodos(readLocalTodos(GUEST_KEY));
-        notify(t.notLoginLocal, true);
+        previousUserIdRef.current = null;
         return;
+      }
+
+      if (previousUserIdRef.current !== current.id) {
+        setPreferencesLoaded(false);
+        previousUserIdRef.current = current.id;
       }
 
       const foundName = await loadOrCreateUsername(current);
@@ -425,6 +820,7 @@ export default function App() {
       const nextTodos = await loadTodosForUser(current.id);
       setTodos(nextTodos);
       writeLocalTodos(`taskease_todos_${current.id}`, nextTodos);
+      setPreferencesLoaded(true);
     });
 
     return () => {
@@ -442,13 +838,24 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!supabase || !user) return;
+    if (user) return;
+    try {
+      const raw = localStorage.getItem(GUEST_LABELS_KEY);
+      if (raw) setTaskLabels(parseTaskLabels(JSON.parse(raw)));
+    } catch {
+      /* ignore */
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!supabase || !user || !preferencesLoaded) return;
     savePreferences(user.id, {
       language: lang,
       clock_format: clockFormat,
       theme_mode: themeMode,
+      task_labels: taskLabels,
     });
-  }, [user, lang, clockFormat, themeMode]);
+  }, [user, lang, clockFormat, themeMode, taskLabels, preferencesLoaded]);
 
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
@@ -465,6 +872,12 @@ export default function App() {
     return Number.isFinite(sum) ? sum.toFixed(1) : "0.0";
   }, [pendingTodos]);
 
+  const mergedTaskLabels = useMemo(() => {
+    const fromTodos = todos.map((x) => String(x.label || "").trim()).filter(Boolean);
+    const set = new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), ...fromTodos]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, lang));
+  }, [todos, taskLabels, lang]);
+
   const clock = getClockParts(now, lang, clockFormat);
 
   function yellowButtonStyle(active) {
@@ -478,14 +891,29 @@ export default function App() {
   async function loadTodosForUser(userId) {
     if (!supabase || !userId) return readLocalTodos(GUEST_KEY);
 
-    const { data, error } = await supabase
+    let result = await supabase
       .from(TODO_TABLE)
-      .select("id,title,status,completed,estimated_hours,ddl,remark,priority,label,created_at,user_id")
+      .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
+    // Transient auth lock conflict can happen when multiple auth requests overlap.
+    // Retry once instead of immediately falling back to local storage.
+    if (result.error && isTransientLockError(result.error)) {
+      await sleep(250);
+      result = await supabase
+        .from(TODO_TABLE)
+        .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+    }
+
+    const { data, error } = result;
+
     if (error) {
-      notify(`${t.syncFallback} ${error.message || ""}`.trim(), true);
+      if (!isTransientLockError(error)) {
+        notify(`${t.syncFallback} ${error.message || ""}`.trim(), true);
+      }
       return readLocalTodos(`taskease_todos_${userId}`);
     }
 
@@ -495,7 +923,7 @@ export default function App() {
   async function loadPreferences(userId) {
     const { data } = await supabase
       .from(PREFERENCES_TABLE)
-      .select("language,clock_format,theme_mode")
+      .select("language,clock_format,theme_mode,task_labels")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -503,6 +931,9 @@ export default function App() {
     if (data.language && (data.language === "zh-CN" || data.language === "zh-TW" || data.language === "en")) setLang(data.language);
     if (data.clock_format && (data.clock_format === "12h" || data.clock_format === "24h")) setClockFormat(data.clock_format);
     if (data.theme_mode && (data.theme_mode === "light" || data.theme_mode === "dark" || data.theme_mode === "system")) setThemeMode(data.theme_mode);
+    if (data.task_labels !== undefined && data.task_labels !== null) {
+      setTaskLabels(parseTaskLabels(data.task_labels));
+    }
   }
 
   async function savePreferences(userId, prefs) {
@@ -524,9 +955,23 @@ export default function App() {
 
     if (data?.username) return data.username;
 
-    const fallback = normalizeUsername(String(currentUser.email || "").split("@")[0]) || "user";
-    await ensureProfile(currentUser.id, fallback);
-    return fallback;
+    // If there is no profile row yet (common with confirm-email flow),
+    // do NOT force-write "user" into profiles.
+    // Only create profile when we have a valid candidate username.
+    const metaName = normalizeUsername(currentUser.user_metadata?.username || "");
+    if (isValidUsername(metaName)) {
+      await ensureProfile(currentUser.id, metaName);
+      return metaName;
+    }
+
+    const pendingName = normalizeUsername(getPendingUsernameByEmail(currentUser.email || ""));
+    if (isValidUsername(pendingName)) {
+      await ensureProfile(currentUser.id, pendingName);
+      clearPendingUsernameByEmail(currentUser.email || "");
+      return pendingName;
+    }
+
+    return "user";
   }
 
   async function ensureProfile(userId, name) {
@@ -552,15 +997,57 @@ export default function App() {
   function resetDraft() {
     setDraft({
       title: "",
-      estimated_hours: "0.5",
+      estimated_hours: "",
       ddl: "",
       label: "",
-      priority: "0",
+      priority: "",
       remark: "",
     });
   }
 
-  async function handleAddTask(event) {
+  function openAddTaskModal() {
+    setEditingTodoId(null);
+    resetDraft();
+    setIsAddModalOpen(true);
+  }
+
+  function openEditTodo(todo) {
+    setEditingTodoId(todo.id);
+    setDraft({
+      title: todo.title || "",
+      estimated_hours: Number(todo.estimated_hours) > 0 ? String(todo.estimated_hours) : "",
+      ddl: todo.ddl ? toDatetimeLocalValue(todo.ddl) : "",
+      label: todo.label || "",
+      priority: Number(todo.priority) > 0 ? String(todo.priority) : "",
+      remark: todo.remark || "",
+    });
+    setIsAddModalOpen(true);
+  }
+
+  function closeAddModal() {
+    setIsAddModalOpen(false);
+    setEditingTodoId(null);
+    resetDraft();
+  }
+
+  function handleAddLabelToLibrary(tag) {
+    const trimmed = String(tag || "").trim();
+    if (!trimmed) return;
+    const next = Array.from(new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), trimmed])).sort((a, b) =>
+      a.localeCompare(b, lang),
+    );
+    setTaskLabels(next);
+    if (!user) {
+      try {
+        localStorage.setItem(GUEST_LABELS_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+    }
+    setDraft((p) => ({ ...p, label: trimmed }));
+  }
+
+  async function handleTaskFormSubmit(event) {
     event.preventDefault();
     const title = draft.title.trim();
     if (!title) {
@@ -568,15 +1055,31 @@ export default function App() {
       return;
     }
 
+    const estRaw = String(draft.estimated_hours ?? "").trim();
+    const estimated_hours = estRaw === "" ? 0 : Math.max(0, Number(estRaw));
+    const ddl = draft.ddl ? new Date(draft.ddl).toISOString() : null;
+    const priRaw = String(draft.priority ?? "").trim();
+    const priority = priRaw === "" ? 0 : Math.max(0, Math.min(10, Number(priRaw)));
+    const label = String(draft.label ?? "").trim() || null;
+    const remark = String(draft.remark ?? "").trim() || null;
+
+    if (editingTodoId) {
+      const patch = { title, estimated_hours, ddl, remark, priority, label };
+      await updateTodo(editingTodoId, patch);
+      closeAddModal();
+      return;
+    }
+
     const payload = {
       id: crypto.randomUUID(),
       title,
       status: STATUS_PENDING,
-      estimated_hours: Number(draft.estimated_hours || 0),
-      ddl: draft.ddl ? new Date(draft.ddl).toISOString() : null,
-      remark: draft.remark || null,
-      priority: Math.max(0, Math.min(10, Number(draft.priority || 0))),
-      label: draft.label || null,
+      estimated_hours,
+      ddl,
+      remark,
+      priority,
+      label,
+      progress_percent: 0,
       created_at: new Date().toISOString(),
     };
 
@@ -584,15 +1087,14 @@ export default function App() {
       const { data, error } = await supabase
         .from(TODO_TABLE)
         .insert(payload)
-        .select("id,title,status,estimated_hours,ddl,remark,priority,label,created_at,user_id")
+        .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
         .single();
 
       if (!error && data) {
         const next = [mapTodo(data), ...todos];
         setTodos(next);
         syncLocal(next);
-        resetDraft();
-        setIsAddModalOpen(false);
+        closeAddModal();
         return;
       }
 
@@ -602,17 +1104,21 @@ export default function App() {
     const next = [mapTodo(payload), ...todos];
     setTodos(next);
     syncLocal(next);
-    resetDraft();
-    setIsAddModalOpen(false);
+    closeAddModal();
   }
 
   async function updateTodo(id, patch) {
     const previous = todos;
-    const next = todos.map((item) => (item.id === id ? { ...item, ...patch } : item));
+    const nextPatch = { ...patch };
+    if (nextPatch.progress_percent != null) {
+      nextPatch.progress_percent = snapProgress(nextPatch.progress_percent);
+    }
+    const next = todos.map((item) => (item.id === id ? { ...item, ...nextPatch } : item));
     setTodos(next);
 
     if (supabase && user) {
-      const { error } = await supabase.from(TODO_TABLE).update(patch).eq("id", id).eq("user_id", user.id);
+      const dbPatch = Object.fromEntries(Object.entries(nextPatch).filter(([, v]) => v !== undefined));
+      const { error } = await supabase.from(TODO_TABLE).update(dbPatch).eq("id", id).eq("user_id", user.id);
       if (error) {
         setTodos(previous);
         notify(`${t.updateRollback} ${error.message || ""}`.trim(), true);
@@ -638,6 +1144,14 @@ export default function App() {
     }
 
     syncLocal(next);
+  }
+
+  async function confirmDeleteEditingTask() {
+    const id = editingTodoId;
+    if (!id) return;
+    await handleDelete(id);
+    setConfirmDeleteOpen(false);
+    closeAddModal();
   }
 
   async function handleBatchDone() {
@@ -698,14 +1212,14 @@ export default function App() {
       return;
     }
 
-    const uname = normalizeUsername(loginUsername);
-    if (!isValidUsername(uname) || loginPassword.length < 6) {
+    const email = String(loginEmail || "").trim().toLowerCase();
+    if (!isValidEmail(email) || loginPassword.length < 6) {
       notify(t.invalidLogin, true);
       return;
     }
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: usernameToEmail(uname),
+      email,
       password: loginPassword,
     });
 
@@ -715,6 +1229,7 @@ export default function App() {
     }
 
     setIsAuthModalOpen(false);
+    setLoginEmail("");
     setLoginPassword("");
   }
 
@@ -727,8 +1242,14 @@ export default function App() {
     }
 
     const uname = normalizeUsername(registerUsername);
+    const email = String(registerEmail || "").trim().toLowerCase();
     if (!isValidUsername(uname)) {
       notify(t.invalidUsername, true);
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      notify(t.invalidEmail, true);
       return;
     }
 
@@ -748,290 +1269,435 @@ export default function App() {
     }
 
     const { data, error } = await supabase.auth.signUp({
-      email: usernameToEmail(uname),
+      email,
       password: registerPassword,
+      options: {
+        data: {
+          username: uname,
+        },
+      },
     });
 
     if (error) {
+      if (isAuthRateLimitError(error)) {
+        notify(t.authRateLimitHint, true);
+        return;
+      }
+      if (String(error.message || "").includes("profiles_username_check")) {
+        notify(t.usernameDbConstraintHint, true);
+        return;
+      }
       notify(`${t.registerFailed}: ${error.message}`, true);
       return;
     }
 
-    if (data.user) {
-      await ensureProfile(data.user.id, uname);
-      notify(t.registerSuccess, false);
-      setIsAuthModalOpen(false);
+    const newUser = data.user;
+    if (!newUser) {
+      notify(t.registerFailed, true);
       return;
     }
 
-    notify(t.registerNeedEmailCfg, true);
+    setPendingUsernameByEmail(email, uname);
+
+    if (data.session) {
+      await ensureProfile(newUser.id, uname);
+      clearPendingUsernameByEmail(email);
+      notify(t.registerSuccess, false);
+      setIsAuthModalOpen(false);
+      setRegisterUsername("");
+      setRegisterEmail("");
+      setRegisterPassword("");
+      setRegisterConfirmPassword("");
+      return;
+    }
+
+    setOtpEmail(email);
+    setOtpCode("");
+    setIsOtpModalOpen(true);
+    setIsAuthModalOpen(false);
+    notify(t.registerNeedEmailCfg, false);
+    setRegisterPassword("");
+    setRegisterConfirmPassword("");
+    setRegisterUsername("");
+    setRegisterEmail("");
+  }
+
+  async function handleOtpVerify(event) {
+    event.preventDefault();
+
+    if (!supabase) {
+      notify(t.supabaseMissing, true);
+      return;
+    }
+
+    const email = String(otpEmail || "").trim().toLowerCase();
+    const token = String(otpCode || "").trim().replace(/\s/g, "");
+    if (!email || !token) {
+      notify(t.otpInvalid, true);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "signup",
+    });
+
+    if (error) {
+      if (isAuthRateLimitError(error)) {
+        notify(t.authRateLimitHint, true);
+        return;
+      }
+      notify(`${t.otpFailed}: ${error.message}`, true);
+      return;
+    }
+
+    if (!data?.session) {
+      notify(t.otpFailed, true);
+      return;
+    }
+
+    setIsOtpModalOpen(false);
+    setOtpEmail("");
+    setOtpCode("");
+    notify(t.registerVerified, false);
   }
 
   async function handleLogout() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
-    setIsAuthModalOpen(false);
-    setIsSettingsOpen(false);
+    try {
+      if (!supabase) {
+        // 如果Supabase不可用，强制清除本地状态
+        setUser(null);
+        setUsername("");
+        setTodos(readLocalTodos(GUEST_KEY));
+        setIsAuthModalOpen(false);
+        notify('已退出登录', false);
+        return;
+      }
+      
+      await supabase.auth.signOut();
+      setUser(null);
+      setUsername("");
+      setTodos(readLocalTodos(GUEST_KEY));
+      setIsAuthModalOpen(false);
+      notify('已退出登录', false);
+    } catch (error) {
+      console.error('登出失败:', error);
+      // 即使登出失败，也强制清除本地状态
+      setUser(null);
+      setUsername("");
+      setTodos(readLocalTodos(GUEST_KEY));
+      setIsAuthModalOpen(false);
+      notify('已退出登录', false);
+    }
+  }
+
+  async function handleUpdateEmail(nextEmail) {
+    if (!supabase || !user) {
+      notify(t.actionNeedLogin, true);
+      return false;
+    }
+    const email = String(nextEmail || "").trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      notify(t.invalidEmail, true);
+      return false;
+    }
+
+    const { error } = await supabase.auth.updateUser({ email });
+    if (error) {
+      notify(`${t.registerFailed}: ${error.message}`, true);
+      return false;
+    }
+    notify(t.updateEmailSuccess, false);
+    return true;
+  }
+
+  async function handleUpdateUsername(nextUsername) {
+    if (!supabase || !user) {
+      notify(t.actionNeedLogin, true);
+      return false;
+    }
+    const uname = normalizeUsername(nextUsername);
+    if (!isValidUsername(uname)) {
+      notify(t.invalidUsername, true);
+      return false;
+    }
+
+    if (uname === username) {
+      notify(t.usernameUnchanged, true);
+      return false;
+    }
+
+    try {
+      // First try updating existing profile row.
+      let updateResult;
+      try {
+        updateResult = await withTimeout(
+          supabase
+            .from(PROFILE_TABLE)
+            .update({ username: uname })
+            .eq("user_id", user.id)
+            .select("username")
+            .maybeSingle(),
+          10000,
+        );
+      } catch (timeoutError) {
+        if (String(timeoutError?.message || "") === "TIMEOUT") {
+          notify(t.requestTimeout, true);
+          return false;
+        }
+        throw timeoutError;
+      }
+
+      const { data: updated, error: updateError } = updateResult;
+
+      if (updateError) {
+        if (updateError.code === "23505") {
+          notify(t.usernameTaken, true);
+          return false;
+        }
+        // 处理数据库约束错误
+        if (updateError.code === "23514") {
+          notify("用户名不符合数据库约束要求，请使用1-15个字符", true);
+          return false;
+        }
+        if (String(updateError.message || "").includes("profiles_username_check")) {
+          notify(t.usernameDbConstraintHint, true);
+          return false;
+        }
+        notify(`${t.registerFailed}: ${updateError.message}`, true);
+        return false;
+      }
+
+      // If no existing row was updated, insert one explicitly.
+      if (!updated) {
+        let insertResult;
+        try {
+          insertResult = await withTimeout(
+            supabase
+              .from(PROFILE_TABLE)
+              .insert({ user_id: user.id, username: uname })
+              .select("username")
+              .single(),
+            10000,
+          );
+        } catch (timeoutError) {
+          if (String(timeoutError?.message || "") === "TIMEOUT") {
+            notify(t.requestTimeout, true);
+            return false;
+          }
+          throw timeoutError;
+        }
+
+        const { data: inserted, error: insertError } = insertResult;
+
+        if (insertError) {
+          if (insertError.code === "23505") {
+            notify(t.usernameTaken, true);
+            return false;
+          }
+          // 处理数据库约束错误
+          if (insertError.code === "23514") {
+            notify("用户名不符合数据库约束要求，请使用1-15个字符", true);
+            return false;
+          }
+          if (String(insertError.message || "").includes("profiles_username_check")) {
+            notify(t.usernameDbConstraintHint, true);
+            return false;
+          }
+          notify(`${t.registerFailed}: ${insertError.message}`, true);
+          return false;
+        }
+
+        setUsername(inserted?.username || uname);
+      } else {
+        setUsername(updated.username || uname);
+      }
+
+      notify(t.updateUsernameSuccess, false);
+      return true;
+    } catch (error) {
+      // 简化错误处理，移除锁冲突检查
+      notify(`${t.registerFailed}: ${String(error?.message || error)}`, true);
+      return false;
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!supabase || !user?.email) {
+      notify(t.actionNeedLogin, true);
+      return false;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) {
+      notify(`${t.registerFailed}: ${error.message}`, true);
+      return false;
+    }
+    notify(t.resetPasswordSent, false);
+    return true;
+  }
+
+  // 手动同步函数
+  async function handleManualSync() {
+    if (!supabase || !user) {
+      notify(t.actionNeedLogin, true);
+      return;
+    }
+    
+    setIsSyncing(true);
+    try {
+      // 从云端加载数据
+      const cloudTodos = await loadTodosForUser(user.id);
+      setTodos(cloudTodos);
+      writeLocalTodos(storageKey, cloudTodos);
+      
+      notify("同步成功！", false);
+    } catch (error) {
+      notify(`同步失败: ${error.message}`, true);
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   return (
     <main className="container-fluid py-3" style={{ backgroundColor: pageBg, minHeight: "100vh" }}>
       <div className="mx-auto" style={{ maxWidth: "1120px" }}>
-        {notice.text ? (
-          <div className="position-fixed top-0 start-50 translate-middle-x mt-3" style={{ zIndex: 1080, minWidth: "360px", maxWidth: "88vw" }}>
-            <div className={`alert ${notice.warning ? "alert-danger" : "alert-success"} shadow-sm py-2 mb-0 d-flex justify-content-between align-items-center`}>
-              <span>{notice.text}</span>
-              <button className="btn-close ms-2" type="button" onClick={() => setNotice({ text: "", warning: false })} aria-label="close" />
-            </div>
-          </div>
-        ) : null}
+        <Toast notice={notice} onClose={() => setNotice({ text: "", warning: false })} />
 
-        <header className="d-flex justify-content-between align-items-center mb-3">
-          <div className="fw-semibold fs-4" style={{ fontFamily: "Manrope, Noto Sans SC, sans-serif", color: logoColor }}>
-            TaskEase
-          </div>
+        <Header
+            t={t}
+            user={user}
+            username={username}
+            themeMode={themeMode}
+            setThemeMode={setThemeMode}
+            lang={lang}
+            setLang={setLang}
+            clockFormat={clockFormat}
+            setClockFormat={setClockFormat}
+            onLoginClick={(tab = "login") => {
+              setIsAuthModalOpen(true);
+              setActiveAuthTab(tab);
+            }}
+            onLogout={handleLogout}
+            onOpenProfileSettings={() => setIsProfileModalOpen(true)}
+            onManualSync={handleManualSync}
+            isSyncing={isSyncing}
+            logoColor={logoColor}
+            pageBg={pageBg}
+            resolvedTheme={resolvedTheme}
+          />
 
-          <div className="d-flex align-items-center gap-2">
-            <div className="btn-group" role="group" aria-label="Theme">
-              <button className={`btn btn-outline-secondary ${themeMode === "light" ? "active" : ""}`} type="button" onClick={() => setThemeMode("light")} title={t.h24}>
-                <i className="bi bi-sun-fill" />
-              </button>
-              <button className={`btn btn-outline-secondary ${themeMode === "dark" ? "active" : ""}`} type="button" onClick={() => setThemeMode("dark")} title={t.h12}>
-                <i className="bi bi-moon-stars-fill" />
-              </button>
-              <button className={`btn btn-outline-secondary ${themeMode === "system" ? "active" : ""}`} type="button" onClick={() => setThemeMode("system")} title="System">
-                <i className="bi bi-circle-half" />
-              </button>
-            </div>
+        <TaskManager
+          t={t}
+          clock={clock}
+          pendingTodos={pendingTodos}
+          estimateHours={estimateHours}
+          filter={filter}
+          setFilter={setFilter}
+          batchMode={batchMode}
+          setBatchMode={setBatchMode}
+          selectedIds={selectedIds}
+          visibleTodos={visibleTodos}
+          onAddTask={openAddTaskModal}
+          onOpenPlanWork={() => setIsPlanWorkModalOpen(true)}
+          onBatchSelect={setSelectedIds}
+          onBatchDone={handleBatchDone}
+          onBatchDelete={handleBatchDelete}
+          panelBg={panelBg}
+          listBg={listBg}
+          STATUS_DONE={STATUS_DONE}
+          STATUS_PENDING={STATUS_PENDING}
+          updateTodo={updateTodo}
+          onEditTodo={openEditTodo}
+          snapProgress={snapProgress}
+        />
 
-            <div className="position-relative" ref={settingsRef}>
-              <button className="btn btn-outline-secondary" type="button" onClick={() => setIsSettingsOpen((v) => !v)} title={t.settings}>
-                <i className="bi bi-gear-fill" />
-              </button>
-              {isSettingsOpen ? (
-                <div className="dropdown-menu show mt-2 p-3 shadow" style={{ width: "280px", right: 0, left: "auto" }}>
-                  <div className="d-grid gap-3">
-                    <div>
-                      <div className="small text-body-secondary mb-1">{t.language}</div>
-                      <select className="form-select form-select-sm" value={lang} onChange={(e) => setLang(e.target.value)}>
-                        <option value="zh-CN">简体中文</option>
-                        <option value="zh-TW">繁體中文</option>
-                        <option value="en">English</option>
-                      </select>
-                    </div>
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          t={t}
+          user={user}
+          username={username}
+          activeAuthTab={activeAuthTab}
+          setActiveAuthTab={setActiveAuthTab}
+          loginEmail={loginEmail}
+          setLoginEmail={setLoginEmail}
+          loginPassword={loginPassword}
+          setLoginPassword={setLoginPassword}
+          onLogin={handleLogin}
+          registerUsername={registerUsername}
+          setRegisterUsername={setRegisterUsername}
+          registerEmail={registerEmail}
+          setRegisterEmail={setRegisterEmail}
+          registerPassword={registerPassword}
+          setRegisterPassword={setRegisterPassword}
+          registerConfirmPassword={registerConfirmPassword}
+          setRegisterConfirmPassword={setRegisterConfirmPassword}
+          onRegister={handleRegister}
+          pageBg={pageBg}
+        />
 
-                    <div>
-                      <div className="small text-body-secondary mb-1">{t.clockFormat}</div>
-                      <select className="form-select form-select-sm" value={clockFormat} onChange={(e) => setClockFormat(e.target.value)}>
-                        <option value="24h">{t.h24}</option>
-                        <option value="12h">{t.h12}</option>
-                      </select>
-                    </div>
+        <AddTaskModal
+          isOpen={isAddModalOpen}
+          onClose={closeAddModal}
+          t={t}
+          draft={draft}
+          setDraft={setDraft}
+          onSubmit={handleTaskFormSubmit}
+          pageBg={pageBg}
+          isEditing={Boolean(editingTodoId)}
+          taskLabelOptions={mergedTaskLabels}
+          onAddLabelToLibrary={handleAddLabelToLibrary}
+          onRequestDelete={() => setConfirmDeleteOpen(true)}
+        />
 
-                    {user ? (
-                      <button className="btn btn-outline-danger btn-sm" type="button" onClick={handleLogout}>
-                        {t.logout}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-            </div>
+        <ConfirmModal
+          isOpen={confirmDeleteOpen}
+          onClose={() => setConfirmDeleteOpen(false)}
+          title={t.confirmDeleteTitle}
+          message={t.confirmDeleteMessage}
+          confirmLabel={t.confirmDelete}
+          cancelLabel={t.cancel}
+          closeAriaLabel={t.close}
+          pageBg={pageBg}
+          danger
+          onConfirm={confirmDeleteEditingTask}
+        />
 
-            <button
-              className="btn btn-warning text-dark"
-              type="button"
-              onClick={() => {
-                setIsAuthModalOpen(true);
-                setActiveAuthTab(user ? "account" : "login");
-              }}
-            >
-              {user ? username : t.login}
-            </button>
-          </div>
-        </header>
+        <PlanWorkModal
+          isOpen={isPlanWorkModalOpen}
+          onClose={() => setIsPlanWorkModalOpen(false)}
+          t={t}
+          todos={todos}
+          STATUS_DONE={STATUS_DONE}
+          pageBg={pageBg}
+        />
 
-        <section className="card border-0 shadow-sm" style={{ backgroundColor: panelBg }}>
-          <div className="card-body p-4 d-grid gap-3">
-            <div className="text-center">
-              <div className="display-6 fw-semibold">{clock.date} {clock.weekday}</div>
-              <div className="display-4 fw-bold mt-1">{clock.time}</div>
-              <div className="small text-body-secondary mt-2">
-                {t.pendingSummary} {pendingTodos.length} {t.pendingSuffix} {estimateHours} {t.hourUnit}
-              </div>
-            </div>
+        <ProfileSettingsModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          t={t}
+          pageBg={pageBg}
+          username={username}
+          email={user?.email || ""}
+          onUpdateEmail={handleUpdateEmail}
+          onUpdateUsername={handleUpdateUsername}
+          onResetPassword={handleResetPassword}
+        />
 
-            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div className="btn-group" role="tablist" aria-label="filters">
-                <button className="btn btn-sm" style={yellowButtonStyle(filter === "all")} type="button" onClick={() => setFilter("all")}>{t.all}</button>
-                <button className="btn btn-sm" style={yellowButtonStyle(filter === "active")} type="button" onClick={() => setFilter("active")}>{t.active}</button>
-                <button className="btn btn-sm" style={yellowButtonStyle(filter === "done")} type="button" onClick={() => setFilter("done")}>{t.done}</button>
-              </div>
-
-              <div className="d-flex gap-2">
-                <button className="btn btn-success" type="button" onClick={() => setIsAddModalOpen(true)}>
-                  <i className="bi bi-plus-lg me-1" /> {t.addTask}
-                </button>
-                <button className="btn btn-primary" type="button" onClick={() => {
-                  setBatchMode((v) => !v);
-                  setSelectedIds(new Set());
-                }}>
-                  <i className="bi bi-check2-square me-1" /> {t.batchSelect}
-                </button>
-              </div>
-            </div>
-
-            {batchMode ? (
-              <div className="d-flex flex-wrap gap-2">
-                <button className="btn btn-warning text-dark" type="button" onClick={handleBatchDone}>{t.markDone}</button>
-                <button className="btn btn-danger" type="button" onClick={handleBatchDelete}>{t.deleteSelected}</button>
-                <button className="btn btn-outline-secondary" type="button" onClick={() => {
-                  setBatchMode(false);
-                  setSelectedIds(new Set());
-                }}>{t.exitBatch}</button>
-              </div>
-            ) : null}
-
-            <div className="p-2 rounded-3" style={{ backgroundColor: listBg }}>
-              <ul className="list-group">
-                {visibleTodos.length === 0 ? (
-                  <li className="list-group-item text-center" style={{ backgroundColor: listBg }}>
-                    {pendingTodos.length === 0 ? t.allDone : t.noTask}
-                  </li>
-                ) : null}
-
-                {visibleTodos.map((todo) => (
-                  <li key={todo.id} className="list-group-item d-flex flex-wrap align-items-start gap-2" style={{ backgroundColor: listBg }}>
-                    <input
-                      className="form-check-input mt-1"
-                      type="checkbox"
-                      checked={todo.status === STATUS_DONE}
-                      onChange={(e) => updateTodo(todo.id, { status: e.target.checked ? STATUS_DONE : STATUS_PENDING })}
-                    />
-
-                    {batchMode ? (
-                      <input
-                        className="form-check-input mt-1"
-                        type="checkbox"
-                        checked={selectedIds.has(todo.id)}
-                        onChange={(e) => {
-                          const next = new Set(selectedIds);
-                          if (e.target.checked) next.add(todo.id);
-                          else next.delete(todo.id);
-                          setSelectedIds(next);
-                        }}
-                      />
-                    ) : null}
-
-                    <div className="flex-grow-1">
-                      <div className={`${todo.status === STATUS_DONE ? "text-decoration-line-through text-body-secondary" : ""}`}>{todo.title}</div>
-                      <div className="small text-body-secondary mt-1 d-flex flex-wrap gap-2">
-                        <span>{t.estHours}: {Number(todo.estimated_hours || 0).toFixed(1)}</span>
-                        {todo.ddl ? <span>{t.dueAt}: {new Date(todo.ddl).toLocaleString()}</span> : null}
-                        {todo.priority > 0 ? <span>{t.priority}: {todo.priority}</span> : null}
-                        {todo.label ? <span className="badge text-bg-secondary">{todo.label}</span> : null}
-                      </div>
-                      {todo.remark ? <div className="small mt-1">{todo.remark}</div> : null}
-                    </div>
-
-                    <div className="d-flex gap-2">
-                      <button className="btn btn-sm btn-warning text-dark" type="button" onClick={async () => {
-                        const title = window.prompt(t.editPrompt, todo.title)?.trim();
-                        if (!title || title === todo.title) return;
-                        await updateTodo(todo.id, { title });
-                      }}>{t.edit}</button>
-                      <button className="btn btn-sm btn-danger" type="button" onClick={() => handleDelete(todo.id)}>{t.remove}</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
+        <OtpModal
+          isOpen={isOtpModalOpen}
+          onClose={() => setIsOtpModalOpen(false)}
+          t={t}
+          otpEmail={otpEmail}
+          otpCode={otpCode}
+          setOtpCode={setOtpCode}
+          onOtpVerify={handleOtpVerify}
+          pageBg={pageBg}
+        />
       </div>
-
-      {isAuthModalOpen ? (
-        <div className="modal d-block" tabIndex="-1" onClick={(e) => {
-          if (e.target.classList.contains("modal")) setIsAuthModalOpen(false);
-        }}>
-          <div className="modal-dialog">
-            <div className="modal-content" style={{ backgroundColor: pageBg }}>
-              <div className="modal-header">
-                <h2 className="modal-title fs-6">{t.account}</h2>
-                <button type="button" className="btn-close" aria-label={t.close} onClick={() => setIsAuthModalOpen(false)} />
-              </div>
-              <div className="modal-body">
-                {user ? (
-                  <div className="text-body-secondary">{t.loggedInAs}: {username}</div>
-                ) : (
-                  <>
-                    <div className="btn-group w-100 mb-3">
-                      <button className={`btn ${activeAuthTab === "login" ? "btn-primary" : "btn-outline-primary"}`} type="button" onClick={() => setActiveAuthTab("login")}>{t.login}</button>
-                      <button className={`btn ${activeAuthTab === "register" ? "btn-primary" : "btn-outline-primary"}`} type="button" onClick={() => setActiveAuthTab("register")}>{t.register}</button>
-                    </div>
-
-                    {activeAuthTab === "login" ? (
-                      <form className="d-grid gap-2" onSubmit={handleLogin}>
-                        <input className="form-control" type="text" maxLength={32} placeholder={t.username} value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required />
-                        <input className="form-control" type="password" minLength={6} placeholder={t.password} value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
-                        <button className="btn btn-warning text-dark" type="submit">{t.login}</button>
-                      </form>
-                    ) : (
-                      <form className="d-grid gap-2" onSubmit={handleRegister}>
-                        <input className="form-control" type="text" maxLength={32} placeholder={t.username} value={registerUsername} onChange={(e) => setRegisterUsername(e.target.value)} required />
-                        <input className="form-control" type="password" minLength={6} placeholder={t.password} value={registerPassword} onChange={(e) => setRegisterPassword(e.target.value)} required />
-                        <input className="form-control" type="password" minLength={6} placeholder={t.confirmPassword} value={registerConfirmPassword} onChange={(e) => setRegisterConfirmPassword(e.target.value)} required />
-                        <button className="btn btn-warning text-dark" type="submit">{t.register}</button>
-                      </form>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isAddModalOpen ? (
-        <div className="modal d-block" tabIndex="-1" onClick={(e) => {
-          if (e.target.classList.contains("modal")) setIsAddModalOpen(false);
-        }}>
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content" style={{ backgroundColor: pageBg }}>
-              <div className="modal-header">
-                <h2 className="modal-title fs-6">{t.addTask}</h2>
-                <button type="button" className="btn-close" aria-label={t.close} onClick={() => setIsAddModalOpen(false)} />
-              </div>
-              <div className="modal-body">
-                <form className="row g-2" onSubmit={handleAddTask}>
-                  <div className="col-12 col-lg-4">
-                    <input className="form-control" type="text" placeholder={t.titlePlaceholder} value={draft.title} onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))} />
-                  </div>
-                  <div className="col-6 col-lg-2">
-                    <input className="form-control" type="number" step="0.1" min="0" placeholder={t.estHours} value={draft.estimated_hours} onChange={(e) => setDraft((p) => ({ ...p, estimated_hours: e.target.value }))} />
-                  </div>
-                  <div className="col-6 col-lg-3">
-                    <input className="form-control" type="datetime-local" value={draft.ddl} onChange={(e) => setDraft((p) => ({ ...p, ddl: e.target.value }))} />
-                  </div>
-                  <div className="col-6 col-lg-1">
-                    <input className="form-control" type="number" min="0" max="10" placeholder={t.priority} value={draft.priority} onChange={(e) => setDraft((p) => ({ ...p, priority: e.target.value }))} />
-                  </div>
-                  <div className="col-6 col-lg-2">
-                    <input className="form-control" type="text" placeholder={t.label} value={draft.label} onChange={(e) => setDraft((p) => ({ ...p, label: e.target.value }))} />
-                  </div>
-                  <div className="col-12">
-                    <textarea className="form-control" rows="2" placeholder={t.remark} value={draft.remark} onChange={(e) => setDraft((p) => ({ ...p, remark: e.target.value }))} />
-                  </div>
-                  <div className="col-12 d-flex gap-2 justify-content-end">
-                    <button className="btn btn-outline-secondary" type="button" onClick={() => setIsAddModalOpen(false)}>{t.close}</button>
-                    <button className="btn btn-warning text-dark" type="submit">{t.save}</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }
