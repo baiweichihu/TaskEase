@@ -58,6 +58,12 @@ npm run preview
    # 部署 dist/ 文件夹到 Vercel、Netlify、GitHub Pages 等任意静态主机
    ```
 
+4. **部署到 GitHub Pages（推荐：自动部署）**
+   - 已内置 GitHub Actions 工作流：推送到 `main` 分支会自动构建并发布到 Pages。
+   - 在 GitHub 仓库中进入 `Settings > Pages`。
+   - `Build and deployment` 的 `Source` 选择 `GitHub Actions`。
+   - 首次推送后，等待 `Actions` 中 `Deploy to GitHub Pages` 成功即可访问站点。
+
 ### 📋 项目结构
 
 ```
@@ -195,6 +201,12 @@ npm run preview
    npm run build
    # Deploy dist/ folder to Vercel, Netlify, GitHub Pages, or any static host
    ```
+
+4. **Deploy to GitHub Pages (recommended: automatic)**
+   - This repo includes a GitHub Actions workflow that builds and deploys on pushes to `main`.
+   - In your repository, open `Settings > Pages`.
+   - Under `Build and deployment`, set `Source` to `GitHub Actions`.
+   - After your first push, wait for `Deploy to GitHub Pages` to pass in `Actions`.
 
 ### 📋 Project Structure
 
