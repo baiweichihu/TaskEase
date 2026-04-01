@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "vite build --base=/TaskEase/",
     "preview": "vite preview",
-    "predeploy": "npm run build",
+    "predeploy": "npm run build:pages",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
