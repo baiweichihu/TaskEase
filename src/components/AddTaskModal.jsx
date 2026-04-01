@@ -8,7 +8,10 @@ export function AddTaskModal({
   draft,
   setDraft,
   onSubmit,
+  onSubmitProbe,
+  isSubmitting = false,
   pageBg,
+  themeColors,
   isEditing,
   taskLabelOptions,
   onAddLabelToLibrary,
@@ -38,10 +41,24 @@ export function AddTaskModal({
   if (!isOpen) return null;
 
   const customInputStyle = {
-    backgroundColor: "#faefdf",
-    borderColor: "#e9bd34",
+    backgroundColor: themeColors.listBg,
+    borderColor: themeColors.softBtnBorder,
     color: "#2b2b2b",
   };
+
+  const priorityOptions = [
+    { value: "0", label: t.priorityOpt0 },
+    { value: "1", label: t.priorityOpt1 },
+    { value: "2", label: t.priorityOpt2 },
+    { value: "3", label: t.priorityOpt3 },
+    { value: "4", label: "4" },
+    { value: "5", label: "5" },
+    { value: "6", label: "6" },
+    { value: "7", label: "7" },
+    { value: "8", label: "8" },
+    { value: "9", label: "9" },
+    { value: "10", label: "10" },
+  ];
 
   function pickLabel(value) {
     setDraft((p) => ({ ...p, label: value }));
@@ -55,6 +72,8 @@ export function AddTaskModal({
     setNewTagModalOpen(false);
     setNewTagDraft("");
   }
+
+  const labelColStyle = { minWidth: "7.5rem", fontWeight: 600 };
 
   return (
     <>
@@ -122,9 +141,15 @@ export function AddTaskModal({
               <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
             </div>
             <div className="modal-body">
-              <form className="d-grid gap-3" onSubmit={onSubmit}>
+              <form
+                className="d-grid gap-3"
+                onSubmit={(e) => {
+                  onSubmitProbe?.("form_submit_fired");
+                  onSubmit(e);
+                }}
+              >
                 <div className="d-flex align-items-center gap-2 flex-nowrap" style={{ minWidth: 0 }}>
-                  <div className="d-flex align-items-center gap-1 flex-shrink-0 position-relative">
+                  <div className="d-flex align-items-center gap-1 flex-shrink-0 position-relative" style={labelColStyle}>
                     <label className="mb-0 text-nowrap fw-semibold">{t.addFieldTitle}：</label>
                     <button
                       type="button"
@@ -166,7 +191,7 @@ export function AddTaskModal({
                 </div>
 
                 <div className="d-flex align-items-center gap-2 flex-wrap">
-                  <label className="mb-0 text-nowrap flex-shrink-0" style={{ minWidth: "7.5rem", fontWeight: 600 }}>
+                  <label className="mb-0 text-nowrap flex-shrink-0" style={labelColStyle}>
                     {t.estHours}：
                   </label>
                   <input
@@ -181,7 +206,7 @@ export function AddTaskModal({
                   />
                 </div>
                 <div className="d-flex align-items-center gap-2 flex-wrap">
-                  <label className="mb-0 text-nowrap flex-shrink-0" style={{ minWidth: "7.5rem", fontWeight: 600 }}>
+                  <label className="mb-0 text-nowrap flex-shrink-0" style={labelColStyle}>
                     {t.dueAt}：
                   </label>
                   <input
@@ -193,23 +218,26 @@ export function AddTaskModal({
                   />
                 </div>
                 <div className="d-flex align-items-center gap-2 flex-wrap">
-                  <label className="mb-0 text-nowrap flex-shrink-0" style={{ minWidth: "7.5rem", fontWeight: 600 }}>
+                  <label className="mb-0 text-nowrap flex-shrink-0" style={labelColStyle}>
                     {t.priority}：
                   </label>
-                  <input
+                  <select
                     className="form-control flex-grow-1"
-                    type="number"
-                    min="0"
-                    max="10"
-                    placeholder={t.optionalPlaceholder}
                     value={draft.priority}
                     onChange={(e) => setDraft((p) => ({ ...p, priority: e.target.value }))}
                     style={{ ...customInputStyle, minWidth: "12rem", maxWidth: "24rem" }}
-                  />
+                  >
+                    <option value="">{t.optionalPlaceholder}</option>
+                    {priorityOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="d-flex align-items-center gap-1 flex-nowrap" style={{ minWidth: 0 }}>
-                  <label className="mb-0 text-nowrap flex-shrink-0 fw-semibold">
+                  <label className="mb-0 text-nowrap flex-shrink-0 fw-semibold" style={labelColStyle}>
                     {t.label}：
                   </label>
                   <input
@@ -251,7 +279,7 @@ export function AddTaskModal({
                         key={opt}
                         type="button"
                         className="btn btn-sm flex-shrink-0"
-                        style={{ backgroundColor: "#f2c84b", borderColor: "#e9bd34", color: "#2b2b2b", fontSize: "0.8rem" }}
+                        style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder, color: "#2b2b2b", fontSize: "0.8rem" }}
                         onClick={() => pickLabel(opt)}
                       >
                         {opt}
@@ -261,7 +289,7 @@ export function AddTaskModal({
                 </div>
 
                 <div className="d-flex align-items-start gap-2 flex-wrap">
-                  <label className="mb-0 text-nowrap flex-shrink-0 pt-2" style={{ minWidth: "7.5rem", fontWeight: 600 }}>
+                  <label className="mb-0 text-nowrap flex-shrink-0 pt-2" style={labelColStyle}>
                     {t.remark}：
                   </label>
                   <textarea
@@ -283,8 +311,14 @@ export function AddTaskModal({
                   <button className="btn btn-outline-secondary" type="button" onClick={onClose}>
                     {t.cancel}
                   </button>
-                  <button className="btn btn-warning text-dark" type="submit">
-                    {isEditing ? t.saveChanges : t.addTaskSubmit}
+                  <button
+                    className="btn text-dark"
+                    type="submit"
+                    disabled={isSubmitting}
+                    onClick={() => onSubmitProbe?.("submit_button_clicked")}
+                    style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder }}
+                  >
+                    {isSubmitting ? t.submitting : isEditing ? t.saveChanges : t.addTaskSubmit}
                   </button>
                 </div>
               </form>
