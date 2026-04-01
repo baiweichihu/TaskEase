@@ -9,15 +9,16 @@ import {
   ProfileSettingsModal,
   Toast,
   ConfirmModal,
+  PomodoroTimer,
 } from "./components";
 
 // OTP验证模态框组件
-function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVerify, pageBg }) {
+function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVerify, isVerifyingOtp, pageBg, themeColors }) {
   if (!isOpen) return null;
 
   const customInputStyle = {
-    backgroundColor: "#faefdf",
-    borderColor: "#e9bd34",
+    backgroundColor: themeColors.listBg,
+    borderColor: themeColors.softBtnBorder,
     color: "#2b2b2b",
   };
 
@@ -89,7 +90,15 @@ function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVeri
                   style={customInputStyle}
                   required 
                 />
-                <button className="btn btn-warning text-dark" type="submit">{t.otpVerify}</button>
+                <button
+                  className="btn text-dark"
+                  type="submit"
+                  disabled={isVerifyingOtp}
+                  style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder }}
+                >
+                  {t.otpVerify}
+                  {isVerifyingOtp ? <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" /> : null}
+                </button>
               </form>
             </div>
           </div>
@@ -110,15 +119,66 @@ const STATUS_DONE = "done";
 
 const GUEST_KEY = "taskease_todos_guest";
 const THEME_KEY = "taskease_theme_mode";
+const THEME_PRESET_KEY = "taskease_theme_preset";
+const CUSTOM_BG_KEY = "taskease_custom_bg";
 const LANG_KEY = "taskease_lang";
 const CLOCK_KEY = "taskease_clock_format";
+const AUTO_SYNC_KEY = "taskease_auto_sync_enabled";
 const PENDING_USERNAME_KEY_PREFIX = "taskease_pending_username_";
+const USERNAME_CACHE_KEY_PREFIX = "taskease_username_cache_";
 const GUEST_LABELS_KEY = "taskease_task_labels_guest";
+
+function getThemeColors(preset, tone) {
+  const themes = {
+    beige: {
+      light: { pageBg: "#efe3cb", panelBg: "#f8eede", listBg: "#faefdf", logoColor: "#6b4f2f", softBtn: "#f2c84b", softBtnBorder: "#e9bd34", activeBtn: "#e0ae1c", activeBtnBorder: "#d39d0c" },
+      dark: { pageBg: "#1e2636", panelBg: "#2a3447", listBg: "#334159", logoColor: "#f8e7c4", softBtn: "#f2c84b", softBtnBorder: "#e9bd34", activeBtn: "#d39d0c", activeBtnBorder: "#b8860b" },
+    },
+    pink: {
+      light: { pageBg: "#f8dfe8", panelBg: "#fdeaf1", listBg: "#fff2f7", logoColor: "#7a3f58", softBtn: "#f3b7cc", softBtnBorder: "#e89fb9", activeBtn: "#de88ab", activeBtnBorder: "#cc7098" },
+      dark: { pageBg: "#2f2230", panelBg: "#3d2a3d", listBg: "#4a3550", logoColor: "#ffd9e8", softBtn: "#f3b7cc", softBtnBorder: "#e89fb9", activeBtn: "#d785a8", activeBtnBorder: "#bd678f" },
+    },
+    blue: {
+      light: { pageBg: "#deebf8", panelBg: "#eaf3fc", listBg: "#f2f8ff", logoColor: "#2f5675", softBtn: "#9fc7eb", softBtnBorder: "#84b8e3", activeBtn: "#6fa7dd", activeBtnBorder: "#4b8fcf" },
+      dark: { pageBg: "#1f2b3a", panelBg: "#27384b", listBg: "#32465f", logoColor: "#d8ebff", softBtn: "#9fc7eb", softBtnBorder: "#84b8e3", activeBtn: "#659ece", activeBtnBorder: "#4a84b4" },
+    },
+    lavender: {
+      light: { pageBg: "#ebe3f6", panelBg: "#f3ecfb", listBg: "#f8f4fe", logoColor: "#5e4b7a", softBtn: "#cab3e8", softBtnBorder: "#b9a0de", activeBtn: "#ab8fd4", activeBtnBorder: "#977ac4" },
+      dark: { pageBg: "#242437", panelBg: "#2f2f45", listBg: "#3a3a57", logoColor: "#eadfff", softBtn: "#cab3e8", softBtnBorder: "#b9a0de", activeBtn: "#a68ace", activeBtnBorder: "#8f72b9" },
+    },
+    "custom-bg": {
+      light: { pageBg: "rgba(255, 255, 255, 0.16)", panelBg: "rgba(255, 255, 255, 0.26)", listBg: "rgba(255, 255, 255, 0.2)", logoColor: "#ffffff", softBtn: "rgba(255, 255, 255, 0.58)", softBtnBorder: "rgba(255, 255, 255, 0.72)", activeBtn: "rgba(255, 255, 255, 0.78)", activeBtnBorder: "rgba(255, 255, 255, 0.9)" },
+      dark: { pageBg: "rgba(255, 255, 255, 0.16)", panelBg: "rgba(255, 255, 255, 0.26)", listBg: "rgba(255, 255, 255, 0.2)", logoColor: "#ffffff", softBtn: "rgba(255, 255, 255, 0.58)", softBtnBorder: "rgba(255, 255, 255, 0.72)", activeBtn: "rgba(255, 255, 255, 0.78)", activeBtnBorder: "rgba(255, 255, 255, 0.9)" },
+    },
+  };
+
+  const safePreset = Object.prototype.hasOwnProperty.call(themes, preset) ? preset : "beige";
+  const safeTone = tone === "dark" ? "dark" : "light";
+  return themes[safePreset][safeTone];
+}
 
 const TEXT = {
   "zh-CN": {
     appTitle: "TaskEase",
     settings: "设置",
+    themePalette: "主题",
+    themeBeige: "米黄",
+    themePink: "粉色",
+    themeBlue: "浅蓝",
+    themeLavender: "淡紫",
+    themeCustomBg: "自定义背景",
+    customBgInput: "背景图片 URL",
+    customBgPlaceholder: "输入图片链接，留空则用默认渐变背景",
+    customBgReset: "清除背景",
+    customBgLocalOnly: "仅本地可见，不上传云端",
+    customBgLocalFile: "本地文件",
+    customBgSort: "排序",
+    customBgSortTime: "上传时间",
+    customBgSortName: "文件名",
+    customBgEmpty: "暂无背景，点击\"+\"按钮添加",
+    customBgAddNew: "添加文件",
+    or: "或者",
+    confirm: "确定",
     language: "语言",
     clockFormat: "时间制式",
     h12: "12 小时制",
@@ -207,10 +267,11 @@ const TEXT = {
     tagPickHint: "点击选用",
     optionalPlaceholder: "选填",
     progress: "进度",
-    remHours: "预计剩余",
-    remarkPrefix: "备注：",
+    remHours: "预计剩余时长",
+    remarkPrefix: "备注: ",
     taskComplete: "完成",
     taskCompletedState: "已完成",
+    taskReopen: "退回",
     deleteTask: "删除任务",
     confirmDeleteTitle: "确认删除",
     confirmDeleteMessage: "确定要删除该任务吗？此操作无法撤销。",
@@ -231,19 +292,56 @@ const TEXT = {
     usernameUnchanged: "用户名未变化。",
     actionNeedLogin: "请先登录后再操作。",
     requestTimeout: "请求超时，请重试。",
-    loggedInAs: "已登录用户",
+    autoSyncLabel: "自动同步",
+    autoSyncOn: "开启",
+    autoSyncOff: "关闭",
+    autoSyncEnabledNotice: "自动同步已开启（每5分钟）。",
+    autoSyncDisabledNotice: "自动同步已关闭。",
+    syncSuccess: "同步成功。",
+    syncNeedLogin: "当前会话不可用，请重新登录后再同步。",
+    syncFailed: "同步失败",
+    syncing: "同步中...",
+    syncNow: "云同步",
+    submitting: "提交中...",
+    migrateLocalTitle: "检测到本地数据",
+    migrateLocalMessage: "当前账号云端任务为空，但本地有任务。是否将本地任务、背景和偏好迁移到当前账号？",
+    migrateLocalConfirm: "迁移并清理本地",
+    migrateLocalSuccess: "本地数据已迁移到当前账号。",
+    migrateLocalFailed: "迁移失败",
     editPrompt: "编辑任务",
     titlePlaceholder: "任务标题",
-    estHours: "预计小时",
+    estHours: "预计任务时长",
     dueAt: "截止时间",
     label: "标签",
     priority: "优先级",
+    priorityOpt0: "0（未指定）",
+    priorityOpt1: "1（最优先）",
+    priorityOpt2: "2（次优先）",
+    priorityOpt3: "3（不是很优先）",
     remark: "备注",
     weekdays: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
   },
   "zh-TW": {
     appTitle: "TaskEase",
     settings: "設定",
+    themePalette: "主題",
+    themeBeige: "米黃",
+    themePink: "粉色",
+    themeBlue: "淺藍",
+    themeLavender: "淡紫",
+    themeCustomBg: "自訂背景",
+    customBgInput: "背景圖片 URL",
+    customBgPlaceholder: "輸入圖片連結，留空則使用預設漸層背景",
+    customBgReset: "清除背景",
+    customBgLocalOnly: "僅本地可見，不上傳雲端",
+    customBgLocalFile: "本機檔案",
+    customBgSort: "排序",
+    customBgSortTime: "上傳時間",
+    customBgSortName: "檔名",
+    customBgEmpty: "尚無背景，點擊\"+\"按鈕新增",
+    customBgAddNew: "新增檔案",
+    or: "或",
+    confirm: "確定",
     language: "語言",
     clockFormat: "時間制式",
     h12: "12 小時制",
@@ -328,10 +426,11 @@ const TEXT = {
     newTagPrompt: "新標籤名稱",
     tagNone: "（未選）",
     progress: "進度",
-    remHours: "預計剩餘",
-    remarkPrefix: "備註：",
+    remHours: "預計剩餘時長",
+    remarkPrefix: "備註: ",
     taskComplete: "完成",
     taskCompletedState: "已完成",
+    taskReopen: "退回",
     deleteTask: "刪除任務",
     confirmDeleteTitle: "確認刪除",
     confirmDeleteMessage: "確定要刪除此任務嗎？此操作無法復原。",
@@ -352,19 +451,59 @@ const TEXT = {
     usernameUnchanged: "使用者名稱未變更。",
     actionNeedLogin: "請先登入後再操作。",
     requestTimeout: "請求逾時，請重試。",
-    loggedInAs: "已登入使用者",
+    autoSyncLabel: "自動同步",
+    autoSyncOn: "開啟",
+    autoSyncOff: "關閉",
+    autoSyncEnabledNotice: "自動同步已開啟（每5分鐘）。",
+    autoSyncDisabledNotice: "自動同步已關閉。",
+    syncSuccess: "同步成功。",
+    syncNeedLogin: "目前會話不可用，請重新登入後再同步。",
+    syncFailed: "同步失敗",
+    syncing: "同步中...",
+    syncNow: "雲端同步",
+    submitting: "提交中...",
+    migrateLocalTitle: "偵測到本機資料",
+    migrateLocalMessage: "目前帳號雲端任務為空，但本機有任務。要將本機任務、背景與偏好遷移到此帳號嗎？",
+    migrateLocalConfirm: "遷移並清理本機",
+    migrateLocalSuccess: "本機資料已遷移到目前帳號。",
+    migrateLocalFailed: "遷移失敗",
     editPrompt: "編輯任務",
     titlePlaceholder: "任務標題",
-    estHours: "預估小時",
+    estHours: "預計任務時長",
     dueAt: "截止時間",
     label: "標籤",
     priority: "優先級",
+    priorityOpt0: "0（未指定）",
+    priorityOpt1: "1（最優先）",
+    priorityOpt2: "2（次優先）",
+    priorityOpt3: "3（不是很優先）",
     remark: "備註",
     weekdays: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
   },
   en: {
     appTitle: "TaskEase",
     settings: "Settings",
+    themePalette: "Theme",
+    themeBeige: "Beige",
+    themePink: "Pink",
+    themeBlue: "Light Blue",
+    themeLavender: "Lavender",
+    themeCustomBg: "Custom BG",
+    customBgInput: "Background image URL",
+    customBgPlaceholder: "Paste an image URL, or leave empty for default gradient",
+    customBgReset: "Clear background",
+    customBgLocalOnly: "Local only, not uploaded to cloud",
+    customBgLocalFile: "Local file",
+    customBgSort: "Sort",
+    customBgSortTime: "Upload time",
+    customBgSortName: "File name",
+    customBgEmpty: "No backgrounds yet. Click \"+\" to add one.",
+    customBgAddNew: "Add file",
+    or: "Or",
+    confirm: "Confirm",
+    customBgLocalFile: "Local file",
+    or: "or",
+    confirm: "Confirm",
     language: "Language",
     clockFormat: "Clock Format",
     h12: "12-hour",
@@ -453,10 +592,11 @@ const TEXT = {
     tagPickHint: "Click to use",
     optionalPlaceholder: "Optional",
     progress: "Progress",
-    remHours: "Remaining est.",
+    remHours: "Estimated remaining duration",
     remarkPrefix: "Note: ",
     taskComplete: "Done",
     taskCompletedState: "Completed",
+    taskReopen: "Reopen",
     deleteTask: "Delete task",
     confirmDeleteTitle: "Delete task?",
     confirmDeleteMessage: "This task will be removed permanently. This cannot be undone.",
@@ -477,13 +617,32 @@ const TEXT = {
     usernameUnchanged: "Username is unchanged.",
     actionNeedLogin: "Please login first.",
     requestTimeout: "Request timed out. Please try again.",
-    loggedInAs: "Logged in as",
+    autoSyncLabel: "Auto Sync",
+    autoSyncOn: "On",
+    autoSyncOff: "Off",
+    autoSyncEnabledNotice: "Auto sync enabled (every 5 minutes).",
+    autoSyncDisabledNotice: "Auto sync disabled.",
+    syncSuccess: "Sync completed.",
+    syncNeedLogin: "Session is invalid. Please sign in again before syncing.",
+    syncFailed: "Sync failed",
+    syncing: "Syncing...",
+    syncNow: "Cloud sync",
+    submitting: "Submitting...",
+    migrateLocalTitle: "Local Data Found",
+    migrateLocalMessage: "This account has no cloud tasks, but local tasks exist. Move local tasks, background, and preferences into this account?",
+    migrateLocalConfirm: "Migrate and Clear Local",
+    migrateLocalSuccess: "Local data migrated to this account.",
+    migrateLocalFailed: "Migration failed",
     editPrompt: "Edit task",
     titlePlaceholder: "Task title",
-    estHours: "Estimated hours",
+    estHours: "Estimated task duration",
     dueAt: "Due time",
     label: "Label",
     priority: "Priority",
+    priorityOpt0: "0 (Unspecified)",
+    priorityOpt1: "1 (Highest)",
+    priorityOpt2: "2 (High)",
+    priorityOpt3: "3 (Lower)",
     remark: "Remark",
     weekdays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
   },
@@ -591,6 +750,32 @@ function clearPendingUsernameByEmail(email) {
   localStorage.removeItem(`${PENDING_USERNAME_KEY_PREFIX}${normalized}`);
 }
 
+function getCachedUsernameByUserId(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return "";
+  return String(localStorage.getItem(`${USERNAME_CACHE_KEY_PREFIX}${id}`) || "").trim();
+}
+
+function setCachedUsernameByUserId(userId, username) {
+  const id = String(userId || "").trim();
+  const name = String(username || "").trim();
+  if (!id || !name) return;
+  localStorage.setItem(`${USERNAME_CACHE_KEY_PREFIX}${id}`, name);
+}
+
+function resolveFastUsername(currentUser) {
+  const cached = getCachedUsernameByUserId(currentUser?.id);
+  if (cached) return cached;
+
+  const metaName = normalizeUsername(currentUser?.user_metadata?.username || "");
+  if (isValidUsername(metaName)) return metaName;
+
+  const pendingName = normalizeUsername(getPendingUsernameByEmail(currentUser?.email || ""));
+  if (isValidUsername(pendingName)) return pendingName;
+
+  return "user";
+}
+
 function snapProgress(v) {
   const x = Number(v);
   if (!Number.isFinite(x)) return 0;
@@ -652,6 +837,9 @@ function getClockParts(now, lang, hourFormat) {
 }
 
 export default function App() {
+  const OP_TIMEOUT_MS = 10000;
+  const SUBMIT_WATCHDOG_MS = 12000;
+
   const [lang, setLang] = useState(() => {
     const saved = localStorage.getItem(LANG_KEY);
     if (saved === "zh-CN" || saved === "zh-TW" || saved === "en") return saved;
@@ -661,9 +849,20 @@ export default function App() {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
   });
+  const [themePreset, setThemePreset] = useState(() => {
+    const saved = localStorage.getItem(THEME_PRESET_KEY);
+    return saved === "beige" || saved === "pink" || saved === "blue" || saved === "lavender" || saved === "custom-bg"
+      ? saved
+      : "beige";
+  });
+  const [customBackground, setCustomBackground] = useState(() => localStorage.getItem(CUSTOM_BG_KEY) || "");
   const [clockFormat, setClockFormat] = useState(() => {
     const saved = localStorage.getItem(CLOCK_KEY);
     return saved === "12h" || saved === "24h" ? saved : "24h";
+  });
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
+    const saved = localStorage.getItem(AUTO_SYNC_KEY);
+    return saved === "true";
   });
 
   const [resolvedTheme, setResolvedTheme] = useState("light");
@@ -673,8 +872,10 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPlanWorkModalOpen, setIsPlanWorkModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMigratingLocalData, setIsMigratingLocalData] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -687,6 +888,9 @@ export default function App() {
   const [otpEmail, setOtpEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
@@ -710,23 +914,35 @@ export default function App() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [taskLabels, setTaskLabels] = useState([]);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const previousUserIdRef = useRef(null);
+  const authSyncSeqRef = useRef(0);
+  const autoSyncInFlightRef = useRef(false);
+  const migrationPromptShownForUserRef = useRef(null);
+  const ignoreAuthEventsUntilRef = useRef(0);
+  const isLogoutInProgressRef = useRef(false);
 
   const [todos, setTodos] = useState([]);
+  const [timerTaskId, setTimerTaskId] = useState(null);
+  const currentTimerTask = timerTaskId ? todos.find((t) => t.id === timerTaskId) : null;
 
   const t = TEXT[lang];
   const storageKey = user ? `taskease_todos_${user.id}` : GUEST_KEY;
 
-  const pageBg = resolvedTheme === "dark" ? "#1e2636" : "#efe3cb";
-  const panelBg = resolvedTheme === "dark" ? "#2a3447" : "#f8eede";
-  const listBg = resolvedTheme === "dark" ? "#334159" : "#faefdf";
-  const logoColor = resolvedTheme === "dark" ? "#f8e7c4" : "#6b4f2f";
+  const isCustomBgTheme = themePreset === "custom-bg";
+  const paletteTone = isCustomBgTheme ? "light" : resolvedTheme;
+  const themeColors = getThemeColors(themePreset, paletteTone);
+  const { pageBg, panelBg, listBg, logoColor } = themeColors;
 
   function notify(text, warning = true) {
     setNotice({ text, warning });
     window.setTimeout(() => {
       setNotice((prev) => (prev.text === text ? { text: "", warning: false } : prev));
     }, 4500);
+  }
+
+  function pushDiag() {
+    // diagnostics disabled by request
   }
 
   useEffect(() => {
@@ -742,11 +958,19 @@ export default function App() {
       return mode;
     }
 
-    const next = resolve(themeMode);
+    const next = isCustomBgTheme ? "light" : resolve(themeMode);
     setResolvedTheme(next);
     document.documentElement.setAttribute("data-bs-theme", next);
     localStorage.setItem(THEME_KEY, themeMode);
-  }, [themeMode]);
+  }, [themeMode, isCustomBgTheme]);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_PRESET_KEY, themePreset);
+  }, [themePreset]);
+
+  useEffect(() => {
+    localStorage.setItem(CUSTOM_BG_KEY, customBackground);
+  }, [customBackground]);
 
   useEffect(() => {
     localStorage.setItem(LANG_KEY, lang);
@@ -757,7 +981,11 @@ export default function App() {
   }, [clockFormat]);
 
   useEffect(() => {
-    if (themeMode !== "system") return;
+    localStorage.setItem(AUTO_SYNC_KEY, autoSyncEnabled ? "true" : "false");
+  }, [autoSyncEnabled]);
+
+  useEffect(() => {
+    if (themeMode !== "system" || isCustomBgTheme) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
       const next = media.matches ? "dark" : "light";
@@ -766,7 +994,7 @@ export default function App() {
     };
     media.addEventListener("change", handler);
     return () => media.removeEventListener("change", handler);
-  }, [themeMode]);
+  }, [themeMode, isCustomBgTheme]);
 
   useEffect(() => {
     if (!supabase) {
@@ -777,65 +1005,148 @@ export default function App() {
 
     let mounted = true;
 
+    async function applySession(current, event = "UNKNOWN") {
+      const seq = ++authSyncSeqRef.current;
+      pushDiag("authSync", "start", { event, seq, hasUser: Boolean(current), userId: current?.id || null });
+
+      if (current && Date.now() < ignoreAuthEventsUntilRef.current) {
+        pushDiag("authSync", "ignored_during_forced_logout", { event, seq, userId: current.id }, "warn");
+        return;
+      }
+
+      setUser(current);
+      setSelectedIds(new Set());
+      setBatchMode(false);
+
+      if (!current) {
+        pushDiag("authSync", "no_user_reset", { event, seq });
+        isLogoutInProgressRef.current = false;
+        ignoreAuthEventsUntilRef.current = 0;
+        setPreferencesLoaded(false);
+        setUsername("");
+        setTodos(readLocalTodos(GUEST_KEY));
+        previousUserIdRef.current = null;
+        autoSyncInFlightRef.current = false;
+        setIsMigratePromptOpen(false);
+        migrationPromptShownForUserRef.current = null;
+        return;
+      }
+
+      if (isLogoutInProgressRef.current) {
+        pushDiag("authSync", "ignored_logout_in_progress", { event, seq, userId: current.id }, "warn");
+        return;
+      }
+
+      const switchedUser = previousUserIdRef.current !== current.id;
+      if (switchedUser) {
+        setPreferencesLoaded(false);
+        previousUserIdRef.current = current.id;
+      }
+
+      // Show a fast local username first so UI does not appear blank when cloud is slow.
+      const fastName = resolveFastUsername(current);
+      setUsername(fastName);
+      pushDiag("authSync", "username_fast_resolved", { seq, userId: current.id, fastName });
+
+      // Avoid repeating heavy profile/todo fetches on token refresh for same user.
+      if (!switchedUser && event === "TOKEN_REFRESHED") {
+        pushDiag("authSync", "skip_token_refreshed", { event, seq, userId: current.id });
+        return;
+      }
+
+      try {
+        pushDiag("authSync", "username_load_start", { seq, userId: current.id });
+        const foundName = await withTimeout(loadOrCreateUsername(current), OP_TIMEOUT_MS);
+        if (!mounted || seq !== authSyncSeqRef.current) return;
+        pushDiag("authSync", "username_load_success", { seq, userId: current.id, foundName: foundName || fastName || "user" });
+        setUsername(foundName || fastName || "user");
+      } catch (err) {
+        if (!mounted || seq !== authSyncSeqRef.current) return;
+        const isTimeout = String(err?.message || "") === "TIMEOUT";
+        pushDiag(
+          "authSync",
+          isTimeout ? "username_load_timeout" : "username_load_error",
+          { seq, userId: current.id, error: String(err?.message || err) },
+          "error",
+        );
+        setUsername(fastName || "user");
+      }
+
+      try {
+        pushDiag("authSync", "preferences_load_start", { seq, userId: current.id });
+        await withTimeout(loadPreferences(current.id), OP_TIMEOUT_MS);
+        pushDiag("authSync", "preferences_load_success", { seq, userId: current.id });
+      } catch (err) {
+        const isTimeout = String(err?.message || "") === "TIMEOUT";
+        pushDiag(
+          "authSync",
+          isTimeout ? "preferences_load_timeout" : "preferences_load_error",
+          { seq, userId: current.id, error: String(err?.message || err) },
+          "warn",
+        );
+      }
+
+      if (!mounted || seq !== authSyncSeqRef.current) return;
+
+      try {
+        pushDiag("authSync", "todos_load_start", { seq, userId: current.id });
+        const nextTodos = await withTimeout(loadTodosForUser(current.id), OP_TIMEOUT_MS);
+        if (!mounted || seq !== authSyncSeqRef.current) return;
+        pushDiag("authSync", "todos_load_success", { seq, userId: current.id, count: nextTodos.length });
+        setTodos(nextTodos);
+        writeLocalTodos(`taskease_todos_${current.id}`, nextTodos);
+
+        const guestTodos = readLocalTodos(GUEST_KEY);
+        if (
+          nextTodos.length === 0 &&
+          guestTodos.length > 0 &&
+          migrationPromptShownForUserRef.current !== current.id
+        ) {
+          migrationPromptShownForUserRef.current = current.id;
+          setIsMigratePromptOpen(true);
+          pushDiag("migration", "prompt_open", { userId: current.id, guestCount: guestTodos.length });
+        }
+      } catch (err) {
+        const isTimeout = String(err?.message || "") === "TIMEOUT";
+        const fallback = readLocalTodos(`taskease_todos_${current.id}`);
+        pushDiag(
+          "authSync",
+          isTimeout ? "todos_load_timeout" : "todos_load_error",
+          { seq, userId: current.id, error: String(err?.message || err), fallbackCount: fallback.length },
+          "warn",
+        );
+        if (mounted && seq === authSyncSeqRef.current) {
+          setTodos(fallback);
+        }
+      }
+
+      if (!mounted || seq !== authSyncSeqRef.current) return;
+      setPreferencesLoaded(true);
+      pushDiag("authSync", "done", { seq, userId: current.id });
+    }
+
     async function initSession() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!mounted) return;
 
-      const current = session?.user ?? null;
-      setUser(current);
-      if (!current) {
-        setUsername("");
-        setTodos(readLocalTodos(GUEST_KEY));
-      }
+      await applySession(session?.user ?? null, "INITIAL_GET_SESSION");
     }
 
     initSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const current = session?.user ?? null;
-      setUser(current);
-      setSelectedIds(new Set());
-      setBatchMode(false);
-
-      if (!current) {
-        setPreferencesLoaded(false);
-        setUsername("");
-        setTodos(readLocalTodos(GUEST_KEY));
-        previousUserIdRef.current = null;
-        return;
-      }
-
-      if (previousUserIdRef.current !== current.id) {
-        setPreferencesLoaded(false);
-        previousUserIdRef.current = current.id;
-      }
-
-      const foundName = await loadOrCreateUsername(current);
-      setUsername(foundName);
-      await loadPreferences(current.id);
-      const nextTodos = await loadTodosForUser(current.id);
-      setTodos(nextTodos);
-      writeLocalTodos(`taskease_todos_${current.id}`, nextTodos);
-      setPreferencesLoaded(true);
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      await applySession(session?.user ?? null, event);
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [t.localOnly, t.notLoginLocal]);
-
-  useEffect(() => {
-    if (!user) return;
-    loadTodosForUser(user.id).then((data) => {
-      setTodos(data);
-      writeLocalTodos(storageKey, data);
-    });
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (user) return;
@@ -848,14 +1159,12 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!supabase || !user || !preferencesLoaded) return;
-    savePreferences(user.id, {
-      language: lang,
-      clock_format: clockFormat,
-      theme_mode: themeMode,
-      task_labels: taskLabels,
-    });
-  }, [user, lang, clockFormat, themeMode, taskLabels, preferencesLoaded]);
+    if (!supabase || !user || !autoSyncEnabled) return;
+    const timer = window.setInterval(() => {
+      void performCloudSync("auto");
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [supabase, user, autoSyncEnabled, lang, clockFormat, themeMode, taskLabels]);
 
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
@@ -921,11 +1230,22 @@ export default function App() {
   }
 
   async function loadPreferences(userId) {
-    const { data } = await supabase
+    let data = null;
+    let error = null;
+
+    ({ data, error } = await supabase
       .from(PREFERENCES_TABLE)
-      .select("language,clock_format,theme_mode,task_labels")
+      .select("language,clock_format,theme_mode,task_labels,auto_sync_enabled,theme_preset,custom_background")
       .eq("user_id", userId)
-      .maybeSingle();
+      .maybeSingle());
+
+    if (error && String(error.message || "").toLowerCase().includes("column")) {
+      ({ data } = await supabase
+        .from(PREFERENCES_TABLE)
+        .select("language,clock_format,theme_mode,task_labels,auto_sync_enabled")
+        .eq("user_id", userId)
+        .maybeSingle());
+    }
 
     if (!data) return;
     if (data.language && (data.language === "zh-CN" || data.language === "zh-TW" || data.language === "en")) setLang(data.language);
@@ -934,16 +1254,56 @@ export default function App() {
     if (data.task_labels !== undefined && data.task_labels !== null) {
       setTaskLabels(parseTaskLabels(data.task_labels));
     }
+    if (typeof data.auto_sync_enabled === "boolean") {
+      setAutoSyncEnabled(data.auto_sync_enabled);
+    }
+    if (data.theme_preset && ["beige", "pink", "blue", "lavender", "custom-bg"].includes(data.theme_preset)) {
+      setThemePreset(data.theme_preset);
+    }
+    if (typeof data.custom_background === "string") {
+      setCustomBackground(data.custom_background);
+    }
   }
 
   async function savePreferences(userId, prefs) {
-    await supabase.from(PREFERENCES_TABLE).upsert(
-      {
-        user_id: userId,
-        ...prefs,
-      },
-      { onConflict: "user_id" },
-    );
+    try {
+      pushDiag("prefSync", "start", { userId, keys: Object.keys(prefs || {}) });
+
+      const sessionResult = await withTimeout(supabase.auth.getSession(), 5000);
+      const session = sessionResult?.data?.session || null;
+      if (!session?.access_token) {
+        pushDiag("prefSync", "skip_no_session", { userId }, "warn");
+        return false;
+      }
+
+      const { error } = await withTimeout(
+        supabase.from(PREFERENCES_TABLE).upsert(
+          {
+            user_id: userId,
+            ...prefs,
+          },
+          { onConflict: "user_id" },
+        ),
+        OP_TIMEOUT_MS,
+      );
+
+      if (error) {
+        pushDiag("prefSync", "error", { userId, status: error.status, message: error.message || "" }, "warn");
+        return false;
+      }
+
+      pushDiag("prefSync", "success", { userId });
+      return true;
+    } catch (error) {
+      const isTimeout = String(error?.message || "") === "TIMEOUT";
+      pushDiag(
+        "prefSync",
+        isTimeout ? "timeout" : "exception",
+        { userId, error: String(error?.message || error) },
+        "warn",
+      );
+      return false;
+    }
   }
 
   async function loadOrCreateUsername(currentUser) {
@@ -953,7 +1313,10 @@ export default function App() {
       .eq("user_id", currentUser.id)
       .maybeSingle();
 
-    if (data?.username) return data.username;
+    if (data?.username) {
+      setCachedUsernameByUserId(currentUser.id, data.username);
+      return data.username;
+    }
 
     // If there is no profile row yet (common with confirm-email flow),
     // do NOT force-write "user" into profiles.
@@ -961,6 +1324,7 @@ export default function App() {
     const metaName = normalizeUsername(currentUser.user_metadata?.username || "");
     if (isValidUsername(metaName)) {
       await ensureProfile(currentUser.id, metaName);
+      setCachedUsernameByUserId(currentUser.id, metaName);
       return metaName;
     }
 
@@ -968,6 +1332,7 @@ export default function App() {
     if (isValidUsername(pendingName)) {
       await ensureProfile(currentUser.id, pendingName);
       clearPendingUsernameByEmail(currentUser.email || "");
+      setCachedUsernameByUserId(currentUser.id, pendingName);
       return pendingName;
     }
 
@@ -1049,62 +1414,142 @@ export default function App() {
 
   async function handleTaskFormSubmit(event) {
     event.preventDefault();
-    const title = draft.title.trim();
-    if (!title) {
-      notify(t.emptyTitle, true);
+    const startedAt = Date.now();
+    pushDiag("taskSubmit", "submit_enter", {
+      isEditing: Boolean(editingTodoId),
+      hasUser: Boolean(user),
+      hasSupabase: Boolean(supabase),
+      titleLen: String(draft.title || "").trim().length,
+    });
+
+    if (isSubmittingTask) {
+      pushDiag("taskSubmit", "blocked_double_submit", {}, "warn");
       return;
     }
 
-    const estRaw = String(draft.estimated_hours ?? "").trim();
-    const estimated_hours = estRaw === "" ? 0 : Math.max(0, Number(estRaw));
-    const ddl = draft.ddl ? new Date(draft.ddl).toISOString() : null;
-    const priRaw = String(draft.priority ?? "").trim();
-    const priority = priRaw === "" ? 0 : Math.max(0, Math.min(10, Number(priRaw)));
-    const label = String(draft.label ?? "").trim() || null;
-    const remark = String(draft.remark ?? "").trim() || null;
+    setIsSubmittingTask(true);
+    const watchdog = window.setTimeout(() => {
+      pushDiag(
+        "taskSubmit",
+        "watchdog_timeout",
+        {
+          elapsedMs: Date.now() - startedAt,
+          isEditing: Boolean(editingTodoId),
+          hasUser: Boolean(user),
+          hasSupabase: Boolean(supabase),
+        },
+        "error",
+      );
+      notify("提交超过12秒未完成，可能是超时或请求链中断。", true);
+    }, SUBMIT_WATCHDOG_MS);
 
-    if (editingTodoId) {
-      const patch = { title, estimated_hours, ddl, remark, priority, label };
-      await updateTodo(editingTodoId, patch);
-      closeAddModal();
-      return;
-    }
+    try {
+      const title = draft.title.trim();
+      if (!title) {
+        pushDiag("taskSubmit", "validation_empty_title", {});
+        notify(t.emptyTitle, true);
+        return;
+      }
 
-    const payload = {
-      id: crypto.randomUUID(),
-      title,
-      status: STATUS_PENDING,
-      estimated_hours,
-      ddl,
-      remark,
-      priority,
-      label,
-      progress_percent: 0,
-      created_at: new Date().toISOString(),
-    };
+      const estRaw = String(draft.estimated_hours ?? "").trim();
+      const estimated_hours = estRaw === "" ? 0 : Math.max(0, Number(estRaw));
+      const ddl = draft.ddl ? new Date(draft.ddl).toISOString() : null;
+      const priRaw = String(draft.priority ?? "").trim();
+      const priority = priRaw === "" ? 0 : Math.max(0, Math.min(10, Number(priRaw)));
+      const label = String(draft.label ?? "").trim() || null;
+      const remark = String(draft.remark ?? "").trim() || null;
 
-    if (supabase && user) {
-      const { data, error } = await supabase
-        .from(TODO_TABLE)
-        .insert(payload)
-        .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
-        .single();
-
-      if (!error && data) {
-        const next = [mapTodo(data), ...todos];
-        setTodos(next);
-        syncLocal(next);
+      if (editingTodoId) {
+        pushDiag("taskSubmit", "edit_start", { todoId: editingTodoId });
+        const patch = { title, estimated_hours, ddl, remark, priority, label };
+        await updateTodo(editingTodoId, patch);
+        pushDiag("taskSubmit", "edit_success", { todoId: editingTodoId });
         closeAddModal();
         return;
       }
 
-      notify(`${t.addFallback} ${error?.message || ""}`.trim(), true);
-    }
+      const payload = {
+        id: crypto.randomUUID(),
+        title,
+        status: STATUS_PENDING,
+        estimated_hours,
+        ddl,
+        remark,
+        priority,
+        label,
+        progress_percent: 0,
+        created_at: new Date().toISOString(),
+      };
 
-    const next = [mapTodo(payload), ...todos];
-    setTodos(next);
-    syncLocal(next);
-    closeAddModal();
+      if (supabase && user) {
+        pushDiag("taskSubmit", "cloud_insert_start", { userId: user.id, taskId: payload.id });
+        let data;
+        let error;
+        try {
+          const result = await withTimeout(
+            supabase
+              .from(TODO_TABLE)
+              .insert(payload)
+              .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
+              .single(),
+            OP_TIMEOUT_MS,
+          );
+          data = result.data;
+          error = result.error;
+        } catch (timeoutError) {
+          if (String(timeoutError?.message || "") === "TIMEOUT") {
+            pushDiag("taskSubmit", "cloud_insert_timeout", { userId: user.id, taskId: payload.id }, "error");
+            notify(t.requestTimeout, true);
+            return;
+          }
+          throw timeoutError;
+        }
+
+        if (!error && data) {
+          pushDiag("taskSubmit", "cloud_insert_success", { userId: user.id, taskId: payload.id });
+          const next = [mapTodo(data), ...todos];
+          setTodos(next);
+          syncLocal(next);
+          closeAddModal();
+          notify(t.addSuccess, false);
+          return;
+        }
+
+        pushDiag("taskSubmit", "cloud_insert_error", { userId: user.id, taskId: payload.id, error: error?.message || "unknown" }, "error");
+        notify(`${t.addFallback} ${error?.message || ""}`.trim(), true);
+      } else {
+        // Local-only mode
+        pushDiag("taskSubmit", "local_insert", { taskId: payload.id });
+        payload.user_id = null;
+        const next = [mapTodo(payload), ...todos];
+        setTodos(next);
+        syncLocal(next);
+        closeAddModal();
+        notify(t.addSuccess, false);
+        return;
+      }
+
+      const next = [mapTodo(payload), ...todos];
+      setTodos(next);
+      syncLocal(next);
+      closeAddModal();
+      pushDiag("taskSubmit", "fallback_local_after_cloud_error", { taskId: payload.id }, "warn");
+    } catch (err) {
+      pushDiag("taskSubmit", "submit_exception", { error: String(err?.message || err) }, "error");
+      notify(`操作失败: ${err.message}`, true);
+    } finally {
+      window.clearTimeout(watchdog);
+      setIsSubmittingTask(false);
+      pushDiag("taskSubmit", "submit_exit", { elapsedMs: Date.now() - startedAt });
+    }
+  }
+
+  function handleTaskSubmitProbe(stage) {
+    pushDiag("taskSubmit", stage, {
+      isEditing: Boolean(editingTodoId),
+      hasUser: Boolean(user),
+      hasSupabase: Boolean(supabase),
+    });
   }
 
   async function updateTodo(id, patch) {
@@ -1206,6 +1651,7 @@ export default function App() {
 
   async function handleLogin(event) {
     event.preventDefault();
+    if (isLoggingIn) return;
 
     if (!supabase) {
       notify(t.supabaseMissing, true);
@@ -1218,15 +1664,35 @@ export default function App() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: loginPassword,
-    });
+    setIsLoggingIn(true);
+    let error;
+    try {
+      const result = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password: loginPassword,
+        }),
+        OP_TIMEOUT_MS,
+      );
+      error = result.error;
+    } catch (timeoutError) {
+      if (String(timeoutError?.message || "") === "TIMEOUT") {
+        notify(t.requestTimeout, true);
+        return;
+      }
+      notify(`${t.loginFailed}: ${String(timeoutError?.message || timeoutError)}`, true);
+      return;
+    } finally {
+      setIsLoggingIn(false);
+    }
 
     if (error) {
       notify(`${t.loginFailed}: ${error.message}`, true);
       return;
     }
+
+    isLogoutInProgressRef.current = false;
+    ignoreAuthEventsUntilRef.current = 0;
 
     setIsAuthModalOpen(false);
     setLoginEmail("");
@@ -1235,6 +1701,7 @@ export default function App() {
 
   async function handleRegister(event) {
     event.preventDefault();
+    if (isRegistering) return;
 
     if (!supabase) {
       notify(t.supabaseMissing, true);
@@ -1263,20 +1730,40 @@ export default function App() {
       return;
     }
 
-    if (await isUsernameTaken(uname)) {
-      notify(t.usernameTaken, true);
-      return;
-    }
+    setIsRegistering(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: registerPassword,
-      options: {
-        data: {
-          username: uname,
-        },
-      },
-    });
+    let data;
+    let error;
+    try {
+      if (await isUsernameTaken(uname)) {
+        notify(t.usernameTaken, true);
+        return;
+      }
+
+      const result = await withTimeout(
+        supabase.auth.signUp({
+          email,
+          password: registerPassword,
+          options: {
+            data: {
+              username: uname,
+            },
+          },
+        }),
+        OP_TIMEOUT_MS,
+      );
+      data = result.data;
+      error = result.error;
+    } catch (timeoutError) {
+      if (String(timeoutError?.message || "") === "TIMEOUT") {
+        notify(t.requestTimeout, true);
+        return;
+      }
+      notify(`${t.registerFailed}: ${String(timeoutError?.message || timeoutError)}`, true);
+      return;
+    } finally {
+      setIsRegistering(false);
+    }
 
     if (error) {
       if (isAuthRateLimitError(error)) {
@@ -1296,6 +1783,9 @@ export default function App() {
       notify(t.registerFailed, true);
       return;
     }
+
+    isLogoutInProgressRef.current = false;
+    ignoreAuthEventsUntilRef.current = 0;
 
     setPendingUsernameByEmail(email, uname);
 
@@ -1324,6 +1814,7 @@ export default function App() {
 
   async function handleOtpVerify(event) {
     event.preventDefault();
+    if (isVerifyingOtp) return;
 
     if (!supabase) {
       notify(t.supabaseMissing, true);
@@ -1337,11 +1828,31 @@ export default function App() {
       return;
     }
 
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "signup",
-    });
+    setIsVerifyingOtp(true);
+
+    let data;
+    let error;
+    try {
+      const result = await withTimeout(
+        supabase.auth.verifyOtp({
+          email,
+          token,
+          type: "signup",
+        }),
+        OP_TIMEOUT_MS,
+      );
+      data = result.data;
+      error = result.error;
+    } catch (timeoutError) {
+      if (String(timeoutError?.message || "") === "TIMEOUT") {
+        notify(t.requestTimeout, true);
+        return;
+      }
+      notify(`${t.otpFailed}: ${String(timeoutError?.message || timeoutError)}`, true);
+      return;
+    } finally {
+      setIsVerifyingOtp(false);
+    }
 
     if (error) {
       if (isAuthRateLimitError(error)) {
@@ -1357,39 +1868,58 @@ export default function App() {
       return;
     }
 
+    isLogoutInProgressRef.current = false;
+    ignoreAuthEventsUntilRef.current = 0;
+
     setIsOtpModalOpen(false);
     setOtpEmail("");
     setOtpCode("");
     notify(t.registerVerified, false);
   }
 
+  function handleStartTimer(taskId) {
+    setTimerTaskId(taskId);
+  }
+
+  function handleStopTimer() {
+    // Stop only resets timer state in the widget; does not close it.
+  }
+
+  function handleCloseTimer() {
+    setTimerTaskId(null);
+  }
+
   async function handleLogout() {
+    pushDiag("auth", "logout_click", { hasSupabase: Boolean(supabase), hasUser: Boolean(user) });
+
+    isLogoutInProgressRef.current = true;
+    ignoreAuthEventsUntilRef.current = Date.now() + 15000;
+    authSyncSeqRef.current += 1;
+
     try {
-      if (!supabase) {
-        // 如果Supabase不可用，强制清除本地状态
-        setUser(null);
-        setUsername("");
-        setTodos(readLocalTodos(GUEST_KEY));
-        setIsAuthModalOpen(false);
-        notify('已退出登录', false);
-        return;
+      if (supabase) {
+        await withTimeout(supabase.auth.signOut(), 6000);
+        pushDiag("auth", "logout_remote_success", {});
       }
-      
-      await supabase.auth.signOut();
-      setUser(null);
-      setUsername("");
-      setTodos(readLocalTodos(GUEST_KEY));
-      setIsAuthModalOpen(false);
-      notify('已退出登录', false);
     } catch (error) {
-      console.error('登出失败:', error);
-      // 即使登出失败，也强制清除本地状态
-      setUser(null);
-      setUsername("");
-      setTodos(readLocalTodos(GUEST_KEY));
-      setIsAuthModalOpen(false);
-      notify('已退出登录', false);
+      const isTimeout = String(error?.message || "") === "TIMEOUT";
+      pushDiag("auth", isTimeout ? "logout_remote_timeout" : "logout_remote_error", { error: String(error?.message || error) }, "warn");
     }
+    // Always clear local state
+    setUser(null);
+    setUsername("");
+    setTodos(readLocalTodos(GUEST_KEY));
+    setIsAuthModalOpen(false);
+    setSelectedIds(new Set());
+    setBatchMode(false);
+    setPreferencesLoaded(false);
+    previousUserIdRef.current = null;
+    autoSyncInFlightRef.current = false;
+    migrationPromptShownForUserRef.current = null;
+    setIsMigratePromptOpen(false);
+    notify('已退出登录', false);
+    pushDiag("auth", "logout_local_cleared", {});
+    return true;
   }
 
   async function handleUpdateEmail(nextEmail) {
@@ -1509,9 +2039,13 @@ export default function App() {
           return false;
         }
 
-        setUsername(inserted?.username || uname);
+        const resolved = inserted?.username || uname;
+        setUsername(resolved);
+        setCachedUsernameByUserId(user.id, resolved);
       } else {
-        setUsername(updated.username || uname);
+        const resolved = updated.username || uname;
+        setUsername(resolved);
+        setCachedUsernameByUserId(user.id, resolved);
       }
 
       notify(t.updateUsernameSuccess, false);
@@ -1539,31 +2073,165 @@ export default function App() {
     return true;
   }
 
-  // 手动同步函数
-  async function handleManualSync() {
+  async function performCloudSync(source = "manual") {
     if (!supabase || !user) {
-      notify(t.actionNeedLogin, true);
-      return;
+      if (source === "manual") notify(t.actionNeedLogin, true);
+      return false;
     }
-    
+
+    if (autoSyncInFlightRef.current) {
+      pushDiag("sync", "skip_in_flight", { source }, "warn");
+      return false;
+    }
+
+    autoSyncInFlightRef.current = true;
     setIsSyncing(true);
     try {
-      // 从云端加载数据
-      const cloudTodos = await loadTodosForUser(user.id);
+      const sessionResult = await withTimeout(supabase.auth.getSession(), 5000);
+      const session = sessionResult?.data?.session || null;
+      if (!session?.access_token) {
+        pushDiag("sync", "no_session", { source }, "warn");
+        if (source === "manual") notify(t.syncNeedLogin, true);
+        return false;
+      }
+
+      const cloudTodos = await withTimeout(loadTodosForUser(user.id), OP_TIMEOUT_MS);
       setTodos(cloudTodos);
       writeLocalTodos(storageKey, cloudTodos);
-      
-      notify("同步成功！", false);
+
+      await savePreferences(user.id, {
+        language: lang,
+        clock_format: clockFormat,
+        theme_mode: themeMode,
+        task_labels: taskLabels,
+        auto_sync_enabled: autoSyncEnabled,
+      });
+
+      pushDiag("sync", "success", { source, count: cloudTodos.length });
+      if (source === "manual") notify(t.syncSuccess, false);
+      return true;
     } catch (error) {
-      notify(`同步失败: ${error.message}`, true);
+      const isTimeout = String(error?.message || "") === "TIMEOUT";
+      pushDiag("sync", isTimeout ? "timeout" : "error", { source, error: String(error?.message || error) }, "error");
+      if (source === "manual") {
+        notify(isTimeout ? t.requestTimeout : `${t.syncFailed}: ${String(error?.message || error)}`, true);
+      }
+      return false;
     } finally {
+      autoSyncInFlightRef.current = false;
       setIsSyncing(false);
     }
   }
 
+  async function handleManualSync() {
+    return await performCloudSync("manual");
+  }
+
+  async function handleToggleAutoSync(nextEnabled) {
+    setAutoSyncEnabled(nextEnabled);
+    if (!supabase || !user) {
+      notify(nextEnabled ? t.autoSyncEnabledNotice : t.autoSyncDisabledNotice, false);
+      return;
+    }
+
+    await savePreferences(user.id, {
+      language: lang,
+      clock_format: clockFormat,
+      theme_mode: themeMode,
+      task_labels: taskLabels,
+      auto_sync_enabled: nextEnabled,
+    });
+    notify(nextEnabled ? t.autoSyncEnabledNotice : t.autoSyncDisabledNotice, false);
+  }
+
+  async function migrateLocalDataToCurrentUser() {
+    if (!supabase || !user) return false;
+    const guestTodos = readLocalTodos(GUEST_KEY);
+
+    setIsMigratingLocalData(true);
+    try {
+      if (guestTodos.length > 0) {
+        const rows = guestTodos.map((x) => ({
+          id: x.id || crypto.randomUUID(),
+          title: String(x.title || "").trim() || "Untitled",
+          status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
+          estimated_hours: Number(x.estimated_hours ?? 0),
+          ddl: x.ddl || null,
+          remark: x.remark || null,
+          priority: Number(x.priority ?? 0),
+          label: x.label || null,
+          progress_percent: snapProgress(x.progress_percent ?? 0),
+          created_at: x.created_at || new Date().toISOString(),
+          user_id: user.id,
+        }));
+
+        const { error } = await withTimeout(
+          supabase.from(TODO_TABLE).upsert(rows, { onConflict: "id" }),
+          OP_TIMEOUT_MS,
+        );
+        if (error) throw error;
+      }
+
+      await savePreferences(user.id, {
+        language: lang,
+        clock_format: clockFormat,
+        theme_mode: themeMode,
+        task_labels: taskLabels,
+        auto_sync_enabled: autoSyncEnabled,
+        theme_preset: themePreset,
+        custom_background: customBackground,
+      });
+
+      localStorage.removeItem(GUEST_KEY);
+      localStorage.removeItem(GUEST_LABELS_KEY);
+
+      await performCloudSync("manual");
+      setIsMigratePromptOpen(false);
+      notify(t.migrateLocalSuccess, false);
+      pushDiag("migration", "success", { userId: user.id, migratedCount: guestTodos.length });
+      return true;
+    } catch (error) {
+      pushDiag("migration", "error", { userId: user.id, error: String(error?.message || error) }, "error");
+      notify(`${t.migrateLocalFailed}: ${String(error?.message || error)}`, true);
+      return false;
+    } finally {
+      setIsMigratingLocalData(false);
+    }
+  }
+
+  const customBackgroundStyle = customBackground
+    ? {
+        backgroundImage: `url(${customBackground})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }
+    : {
+        background: "linear-gradient(135deg, #5f7f9f 0%, #7f5f8f 100%)",
+      };
+
   return (
-    <main className="container-fluid py-3" style={{ backgroundColor: pageBg, minHeight: "100vh" }}>
-      <div className="mx-auto" style={{ maxWidth: "1120px" }}>
+    <main
+      className="container-fluid py-3"
+      style={{
+        minHeight: "100vh",
+        "--te-soft-btn": themeColors.softBtn,
+        "--te-soft-btn-border": themeColors.softBtnBorder,
+        "--te-range-track": themeColors.activeBtn,
+        ...(isCustomBgTheme ? customBackgroundStyle : { backgroundColor: pageBg }),
+      }}
+    >
+      <div
+        className="mx-auto"
+        style={{
+          maxWidth: "1120px",
+          backgroundColor: isCustomBgTheme ? "rgba(0, 0, 0, 0.28)" : "transparent",
+          backdropFilter: isCustomBgTheme ? "blur(6px)" : "none",
+          border: isCustomBgTheme ? "1px solid rgba(255, 255, 255, 0.35)" : "none",
+          borderRadius: isCustomBgTheme ? "16px" : "0",
+          padding: isCustomBgTheme ? "14px" : "0",
+        }}
+      >
         <Toast notice={notice} onClose={() => setNotice({ text: "", warning: false })} />
 
         <Header
@@ -1572,6 +2240,12 @@ export default function App() {
             username={username}
             themeMode={themeMode}
             setThemeMode={setThemeMode}
+            themePreset={themePreset}
+            setThemePreset={setThemePreset}
+            customBackground={customBackground}
+            setCustomBackground={setCustomBackground}
+            themeColors={themeColors}
+            isCustomBgTheme={isCustomBgTheme}
             lang={lang}
             setLang={setLang}
             clockFormat={clockFormat}
@@ -1584,6 +2258,8 @@ export default function App() {
             onOpenProfileSettings={() => setIsProfileModalOpen(true)}
             onManualSync={handleManualSync}
             isSyncing={isSyncing}
+            autoSyncEnabled={autoSyncEnabled}
+            onToggleAutoSync={handleToggleAutoSync}
             logoColor={logoColor}
             pageBg={pageBg}
             resolvedTheme={resolvedTheme}
@@ -1607,19 +2283,19 @@ export default function App() {
           onBatchDelete={handleBatchDelete}
           panelBg={panelBg}
           listBg={listBg}
+          themeColors={themeColors}
           STATUS_DONE={STATUS_DONE}
           STATUS_PENDING={STATUS_PENDING}
           updateTodo={updateTodo}
           onEditTodo={openEditTodo}
           snapProgress={snapProgress}
+          onStartTimer={handleStartTimer}
         />
 
         <AuthModal
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           t={t}
-          user={user}
-          username={username}
           activeAuthTab={activeAuthTab}
           setActiveAuthTab={setActiveAuthTab}
           loginEmail={loginEmail}
@@ -1636,7 +2312,10 @@ export default function App() {
           registerConfirmPassword={registerConfirmPassword}
           setRegisterConfirmPassword={setRegisterConfirmPassword}
           onRegister={handleRegister}
+          isLoggingIn={isLoggingIn}
+          isRegistering={isRegistering}
           pageBg={pageBg}
+          themeColors={themeColors}
         />
 
         <AddTaskModal
@@ -1646,7 +2325,10 @@ export default function App() {
           draft={draft}
           setDraft={setDraft}
           onSubmit={handleTaskFormSubmit}
+          onSubmitProbe={handleTaskSubmitProbe}
+          isSubmitting={isSubmittingTask}
           pageBg={pageBg}
+          themeColors={themeColors}
           isEditing={Boolean(editingTodoId)}
           taskLabelOptions={mergedTaskLabels}
           onAddLabelToLibrary={handleAddLabelToLibrary}
@@ -1666,6 +2348,33 @@ export default function App() {
           onConfirm={confirmDeleteEditingTask}
         />
 
+        <ConfirmModal
+          isOpen={isMigratePromptOpen}
+          onClose={() => {
+            if (!isMigratingLocalData) setIsMigratePromptOpen(false);
+          }}
+          title={t.migrateLocalTitle}
+          message={t.migrateLocalMessage}
+          confirmLabel={
+            isMigratingLocalData ? (
+              <>
+                {t.migrateLocalConfirm}
+                <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" />
+              </>
+            ) : (
+              t.migrateLocalConfirm
+            )
+          }
+          cancelLabel={t.cancel}
+          closeAriaLabel={t.close}
+          pageBg={pageBg}
+          onConfirm={() => {
+            if (!isMigratingLocalData) {
+              void migrateLocalDataToCurrentUser();
+            }
+          }}
+        />
+
         <PlanWorkModal
           isOpen={isPlanWorkModalOpen}
           onClose={() => setIsPlanWorkModalOpen(false)}
@@ -1680,6 +2389,7 @@ export default function App() {
           onClose={() => setIsProfileModalOpen(false)}
           t={t}
           pageBg={pageBg}
+          themeColors={themeColors}
           username={username}
           email={user?.email || ""}
           onUpdateEmail={handleUpdateEmail}
@@ -1695,7 +2405,16 @@ export default function App() {
           otpCode={otpCode}
           setOtpCode={setOtpCode}
           onOtpVerify={handleOtpVerify}
+          isVerifyingOtp={isVerifyingOtp}
           pageBg={pageBg}
+          themeColors={themeColors}
+        />
+
+        <PomodoroTimer
+          isActive={timerTaskId !== null}
+          taskData={currentTimerTask}
+          onStop={handleStopTimer}
+          onClose={handleCloseTimer}
         />
       </div>
     </main>

@@ -159,17 +159,15 @@ export function NetworkMonitor({ isOpen, onClose, user }) {
     
     try {
       // 测试基础连接
-      const response = await fetch(`${supabaseUrl}/rest/v1/profiles?select=count&limit=1`, {
+      await fetch(`${supabaseUrl}/rest/v1/profiles?select=count&limit=1`, {
         headers: {
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('Test response:', response);
-    } catch (error) {
-      console.error('Test request failed:', error);
+    } catch {
+      /* ignore */
     }
   };
 

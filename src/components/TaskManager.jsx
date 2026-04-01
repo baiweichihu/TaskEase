@@ -16,27 +16,37 @@ export function TaskManager({
   onBatchDelete,
   panelBg,
   listBg,
+  themeColors,
   STATUS_DONE,
   STATUS_PENDING,
   updateTodo,
   handleDelete,
   onEditTodo,
   snapProgress,
+  onStartTimer,
 }) {
   function yellowButtonStyle(active) {
     return {
-      backgroundColor: active ? "#e0ae1c" : "#f2c84b",
+      backgroundColor: active ? themeColors.activeBtn : themeColors.softBtn,
       color: "#2b2b2b",
-      borderColor: active ? "#d39d0c" : "#e9bd34",
+      borderColor: active ? themeColors.activeBtnBorder : themeColors.softBtnBorder,
     };
   }
 
   const planBtnStyle = {
-    backgroundColor: "#c9a008",
+    backgroundColor: themeColors.softBtn,
     color: "#2b2b2b",
-    borderColor: "#a67c00",
+    borderColor: themeColors.softBtnBorder,
     fontWeight: 600,
   };
+
+  function priorityNote(priority) {
+    if (priority === 0) return t.priorityOpt0 || "0";
+    if (priority === 1) return t.priorityOpt1 || "1";
+    if (priority === 2) return t.priorityOpt2 || "2";
+    if (priority === 3) return t.priorityOpt3 || "3";
+    return String(priority);
+  }
 
   return (
     <section className="card border-0 shadow-sm" style={{ backgroundColor: panelBg }}>
@@ -57,13 +67,13 @@ export function TaskManager({
           </div>
 
           <div className="d-flex gap-2 flex-wrap">
-            <button className="btn btn-success" type="button" onClick={onAddTask}>
-              <i className="bi bi-plus-lg me-1" /> {t.addTask}
-            </button>
             <button className="btn" type="button" style={planBtnStyle} onClick={onOpenPlanWork}>
               <i className="bi bi-calendar-check me-1" /> {t.planWork}
             </button>
-            <button className="btn btn-primary" type="button" onClick={() => {
+            <button className="btn" type="button" style={planBtnStyle} onClick={onAddTask}>
+              <i className="bi bi-plus-lg me-1" /> {t.addTask}
+            </button>
+            <button className="btn" type="button" style={planBtnStyle} onClick={() => {
               setBatchMode((v) => !v);
             }}>
               <i className="bi bi-check2-square me-1" /> {t.batchSelect}
@@ -97,7 +107,7 @@ export function TaskManager({
                       className="fw-bold text-body-secondary"
                       style={{ fontSize: "1.35rem", minWidth: "2.5rem", fontFamily: "Manrope, Noto Sans SC, sans-serif" }}
                     >
-                      {idx + 1}.
+                      {idx + 1}
                     </span>
                     {batchMode ? (
                       <input
@@ -122,33 +132,37 @@ export function TaskManager({
                     >
                       {todo.title}
                     </div>
-                    <div className="small text-muted mt-2 d-flex flex-wrap gap-x-3 gap-y-1 align-items-baseline">
-                      <span>
-                        {t.estHours}: {Number(todo.estimated_hours || 0).toFixed(1)}
-                        {Number(todo.estimated_hours || 0) > 0 ? (
-                          <>
-                            {" "}
-                            · {t.remHours}:{" "}
-                            {(
-                              (Number(todo.estimated_hours) * (100 - snapProgress(todo.progress_percent))) /
-                              100
-                            ).toFixed(1)}{" "}
-                            {t.hourUnit}
-                          </>
-                        ) : null}
-                      </span>
-                      {todo.ddl ? <span>{t.dueAt}: {new Date(todo.ddl).toLocaleString()}</span> : null}
-                      {todo.priority > 0 ? <span>{t.priority}: {todo.priority}</span> : null}
-                      {todo.label ? <span className="badge" style={{ backgroundColor: "#6c757d", fontWeight: 500 }}>{todo.label}</span> : null}
+                    <div className="small text-muted mt-2 d-flex flex-wrap gap-0 align-items-baseline">
+                      {[
+                        Number(todo.estimated_hours || 0) > 0
+                          ? `${t.estHours}: ${Number(todo.estimated_hours || 0).toFixed(1)} ${t.hourUnit}`
+                          : null,
+                        Number(todo.estimated_hours || 0) > 0
+                          ? `${t.remHours}: ${(
+                            (Number(todo.estimated_hours || 0) * (100 - snapProgress(todo.progress_percent))) /
+                            100
+                          ).toFixed(1)} ${t.hourUnit}`
+                          : null,
+                        todo.ddl ? `${t.dueAt}: ${new Date(todo.ddl).toLocaleString()}` : null,
+                        Number(todo.priority || 0) > 0 ? `${t.priority}: ${priorityNote(Number(todo.priority || 0))}` : null,
+                        todo.label ? `${t.label}: ${todo.label}` : null,
+                      ]
+                        .filter(Boolean)
+                        .map((item, metaIndex) => (
+                          <span key={`${todo.id}-meta-${metaIndex}`} className="d-inline-flex align-items-baseline">
+                            {metaIndex > 0 ? <span className="px-2">·</span> : null}
+                            <span>{item}</span>
+                          </span>
+                        ))}
                     </div>
-                    <div className="mt-2 d-flex align-items-center gap-2 flex-wrap" style={{ maxWidth: "520px" }}>
-                      <span className="small text-muted text-nowrap">
+                    <div className="mt-2 d-flex align-items-center gap-2 flex-nowrap" style={{ maxWidth: "520px", width: "100%" }}>
+                      <span className="small text-muted text-nowrap" style={{ width: "5.4rem", textAlign: "right" }}>
                         {t.progress} {snapProgress(todo.progress_percent)}%
                       </span>
                       <input
                         type="range"
                         className="form-range taskease-range flex-grow-1"
-                        style={{ minWidth: "100px", maxWidth: "280px" }}
+                        style={{ minWidth: "100px", maxWidth: "280px", marginLeft: "0.25rem" }}
                         min={0}
                         max={100}
                         step={10}
@@ -160,12 +174,27 @@ export function TaskManager({
                         aria-label={t.progress}
                       />
                       {todo.status === STATUS_DONE ? (
-                        <span className="small text-muted">{t.taskCompletedState}</span>
+                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                          <span className="small text-muted">{t.taskCompletedState}</span>
+                          <button
+                            type="button"
+                            className="btn btn-sm flex-shrink-0"
+                            style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder, color: "#2b2b2b", fontWeight: 600 }}
+                            onClick={() =>
+                              updateTodo(todo.id, {
+                                status: STATUS_PENDING,
+                                progress_percent: snapProgress(todo.progress_percent) >= 100 ? 90 : snapProgress(todo.progress_percent),
+                              })
+                            }
+                          >
+                            {t.taskReopen}
+                          </button>
+                        </div>
                       ) : (
                         <button
                           type="button"
                           className="btn btn-sm flex-shrink-0"
-                          style={{ backgroundColor: "#d39d0c", borderColor: "#b8860b", color: "#2b2b2b", fontWeight: 600 }}
+                          style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder, color: "#2b2b2b", fontWeight: 600 }}
                           onClick={() =>
                             updateTodo(todo.id, { status: STATUS_DONE, progress_percent: 100 })
                           }
@@ -182,9 +211,19 @@ export function TaskManager({
                     ) : null}
                   </div>
 
-                  <div className="flex-shrink-0 pt-1">
+                  <div className="flex-shrink-0 pt-1 d-flex gap-1">
                     <button
-                      className="btn btn-sm btn-warning text-dark"
+                      className="btn btn-sm"
+                      style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder, color: "#2b2b2b", fontWeight: 600 }}
+                      type="button"
+                      title="计时"
+                      onClick={() => onStartTimer(todo.id)}
+                    >
+                      ⏱
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder, color: "#2b2b2b", fontWeight: 600 }}
                       type="button"
                       onClick={() => onEditTodo(todo)}
                     >

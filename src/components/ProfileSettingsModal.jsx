@@ -5,6 +5,7 @@ export function ProfileSettingsModal({
   onClose,
   t,
   pageBg,
+  themeColors,
   username,
   email,
   onUpdateEmail,
@@ -24,8 +25,14 @@ export function ProfileSettingsModal({
   if (!isOpen) return null;
 
   const inputStyle = {
-    backgroundColor: "#faefdf",
-    borderColor: "#e9bd34",
+    backgroundColor: themeColors.listBg,
+    borderColor: themeColors.softBtnBorder,
+    color: "#2b2b2b",
+  };
+
+  const actionBtnStyle = {
+    backgroundColor: themeColors.softBtn,
+    borderColor: themeColors.softBtnBorder,
     color: "#2b2b2b",
   };
 
@@ -72,11 +79,12 @@ export function ProfileSettingsModal({
                   style={inputStyle}
                 />
                 <button
-                  className="btn btn-warning text-dark"
+                  className="btn"
                   type="button"
                   onClick={async () => {
                     await onUpdateEmail(draftEmail);
                   }}
+                  style={actionBtnStyle}
                 >
                   {t.updateEmail}
                 </button>
@@ -96,7 +104,7 @@ export function ProfileSettingsModal({
                   {usernameRemaining}/15
                 </div>
                 <button
-                  className="btn btn-warning text-dark"
+                  className="btn"
                   type="button"
                   disabled={isSavingUsername}
                   onClick={async () => {
@@ -107,18 +115,21 @@ export function ProfileSettingsModal({
                       setIsSavingUsername(false);
                     }
                   }}
+                  style={actionBtnStyle}
                 >
-                  {isSavingUsername ? "..." : t.updateUsername}
+                  {t.updateUsername}
+                  {isSavingUsername ? <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" /> : null}
                 </button>
               </div>
 
               <div className="d-grid gap-2">
                 <button
-                  className="btn btn-warning text-dark"
+                  className="btn"
                   type="button"
                   onClick={async () => {
                     await onResetPassword();
                   }}
+                  style={actionBtnStyle}
                 >
                   {t.resetPassword}
                 </button>

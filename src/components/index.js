@@ -7,3 +7,5 @@ export { ProfileSettingsModal } from "./ProfileSettingsModal";
 export { Toast } from "./Toast";
 export { InputModal } from "./InputModal";
 export { ConfirmModal } from "./ConfirmModal";
+export { CustomBackgroundModal } from "./CustomBackgroundModal";
+export { PomodoroTimer } from "./PomodoroTimer";

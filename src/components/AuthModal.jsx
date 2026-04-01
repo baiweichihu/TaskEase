@@ -2,8 +2,6 @@ export function AuthModal({
   isOpen,
   onClose,
   t,
-  user,
-  username,
   activeAuthTab,
   setActiveAuthTab,
   loginEmail,
@@ -20,7 +18,10 @@ export function AuthModal({
   registerConfirmPassword,
   setRegisterConfirmPassword,
   onRegister,
+  isLoggingIn,
+  isRegistering,
   pageBg,
+  themeColors,
 }) {
   if (!isOpen) return null;
 
@@ -28,8 +29,8 @@ export function AuthModal({
   const registerUsernameRemaining = Math.max(0, 15 - registerUsernameCount);
 
   const customInputStyle = {
-    backgroundColor: "#faefdf",
-    borderColor: "#e9bd34",
+    backgroundColor: themeColors.listBg,
+    borderColor: themeColors.softBtnBorder,
     color: "#2b2b2b",
   };
 
@@ -84,19 +85,16 @@ export function AuthModal({
               <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
             </div>
             <div className="modal-body">
-              {user ? (
-                <div className="text-body-secondary">{t.loggedInAs}: {username}</div>
-              ) : (
-                <>
+              <>
                   <div className="btn-group w-100 mb-3">
                     <button 
                       className="btn"
                       type="button"
                       onClick={() => setActiveAuthTab("login")}
                       style={{
-                        backgroundColor: activeAuthTab === "login" ? "#e0ae1c" : "transparent",
+                        backgroundColor: activeAuthTab === "login" ? themeColors.activeBtn : "transparent",
                         color: activeAuthTab === "login" ? "#2b2b2b" : "currentColor",
-                        borderColor: "#e9bd34",
+                        borderColor: themeColors.softBtnBorder,
                         borderWidth: "1px",
                       }}
                     >
@@ -107,9 +105,9 @@ export function AuthModal({
                       type="button"
                       onClick={() => setActiveAuthTab("register")}
                       style={{
-                        backgroundColor: activeAuthTab === "register" ? "#e0ae1c" : "transparent",
+                        backgroundColor: activeAuthTab === "register" ? themeColors.activeBtn : "transparent",
                         color: activeAuthTab === "register" ? "#2b2b2b" : "currentColor",
-                        borderColor: "#e9bd34",
+                        borderColor: themeColors.softBtnBorder,
                         borderWidth: "1px",
                       }}
                     >
@@ -138,7 +136,10 @@ export function AuthModal({
                         style={customInputStyle}
                         required 
                       />
-                      <button className="btn btn-warning text-dark" type="submit">{t.login}</button>
+                      <button className="btn text-dark" style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder }} type="submit" disabled={isLoggingIn}>
+                        {t.login}
+                        {isLoggingIn ? <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" /> : null}
+                      </button>
                     </form>
                   ) : (
                     <form className="d-grid gap-2" onSubmit={onRegister}>
@@ -185,11 +186,13 @@ export function AuthModal({
                         style={customInputStyle}
                         required 
                       />
-                      <button className="btn btn-warning text-dark" type="submit">{t.register}</button>
+                      <button className="btn text-dark" style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder }} type="submit" disabled={isRegistering}>
+                        {t.register}
+                        {isRegistering ? <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" /> : null}
+                      </button>
                     </form>
                   )}
-                </>
-              )}
+              </>
             </div>
           </div>
         </div>
