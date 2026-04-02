@@ -8,6 +8,7 @@ export function PlanWorkModal({
   todos,
   STATUS_DONE,
   pageBg,
+  themeColors,
 }) {
   const [hoursInput, setHoursInput] = useState("");
   const [result, setResult] = useState(null);
@@ -23,9 +24,16 @@ export function PlanWorkModal({
   if (!isOpen) return null;
 
   const customInputStyle = {
-    backgroundColor: "#faefdf",
-    borderColor: "#e9bd34",
+    backgroundColor: themeColors.listBg,
+    borderColor: themeColors.softBtnBorder,
     color: "#2b2b2b",
+  };
+
+  const softBtnStyle = {
+    backgroundColor: themeColors.softBtn,
+    borderColor: themeColors.softBtnBorder,
+    color: "#2b2b2b",
+    fontWeight: 600,
   };
 
   function runPlan(e) {
@@ -49,12 +57,9 @@ export function PlanWorkModal({
         }}
       />
       <div
-        className="modal d-block"
+        className="modal d-block taskease-modal-enter"
         tabIndex="-1"
-        style={{
-          animation: "slideDown 0.4s ease-out",
-          zIndex: 1050,
-        }}
+        style={{ zIndex: 1050 }}
       >
         <style>{`
           @keyframes slideDown {
@@ -116,13 +121,13 @@ export function PlanWorkModal({
                     style={customInputStyle}
                   />
                 </div>
-                <button className="btn btn-warning text-dark" type="submit">
+                <button className="btn" style={softBtnStyle} type="submit">
                   {t.planGenerate}
                 </button>
               </form>
 
               {result ? (
-                <div className="border rounded-3 p-3" style={{ backgroundColor: "rgba(0,0,0,0.03)" }}>
+                <div className="border rounded-3 p-3" style={{ backgroundColor: themeColors.listBg, borderColor: themeColors.softBtnBorder }}>
                   {result.reason === "invalid_hours" ? (
                     <p className="text-danger mb-0 small">{t.planInvalidHours}</p>
                   ) : result.reason === "no_tasks" ? (

@@ -9,3 +9,4 @@ export { InputModal } from "./InputModal";
 export { ConfirmModal } from "./ConfirmModal";
 export { CustomBackgroundModal } from "./CustomBackgroundModal";
 export { PomodoroTimer } from "./PomodoroTimer";
+export { AboutModal } from "./AboutModal";

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CustomBackgroundModal } from "./CustomBackgroundModal";
 
 export function Header({
@@ -20,6 +20,7 @@ export function Header({
   onLoginClick,
   onLogout,
   onOpenProfileSettings,
+  onOpenAbout,
   onManualSync,
   isSyncing,
   autoSyncEnabled,
@@ -29,10 +30,21 @@ export function Header({
   resolvedTheme,
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsClosing, setIsSettingsClosing] = useState(false);
   const [isCustomBgModalOpen, setIsCustomBgModalOpen] = useState(false);
   const [isLogoutLoading, setIsLogoutLoading] = useState(false);
   const [isManualSyncLoading, setIsManualSyncLoading] = useState(false);
+  const closeTimerRef = useRef(null);
   const labelTextColor = resolvedTheme === "dark" || isCustomBgTheme ? "#f8f9fa" : "#212529";
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const softButtonStyle = {
     backgroundColor: themeColors.softBtn,
@@ -59,6 +71,25 @@ export function Header({
     setThemePreset("custom-bg");
   };
 
+  function openSettings() {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setIsSettingsClosing(false);
+    setIsSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    setIsSettingsClosing(true);
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsSettingsOpen(false);
+      setIsSettingsClosing(false);
+      closeTimerRef.current = null;
+    }, 240);
+  }
+
   return (
     <header className="d-flex justify-content-between align-items-center mb-3">
       <div className="fw-semibold fs-4" style={{ fontFamily: "Manrope, Noto Sans SC, sans-serif", color: logoColor }}>
@@ -70,7 +101,7 @@ export function Header({
           <button
             className="btn d-flex align-items-center gap-2"
             type="button"
-            onClick={() => setIsSettingsOpen((v) => !v)}
+            onClick={() => (isSettingsOpen ? closeSettings() : openSettings())}
             title={t.settings}
             style={{
               backgroundColor: themeColors.softBtn,
@@ -84,6 +115,7 @@ export function Header({
           {isSettingsOpen ? (
             <>
             <div
+              className={isSettingsClosing ? "taskease-modal-backdrop-exit" : ""}
               style={{
                 position: "fixed",
                 top: 0,
@@ -92,16 +124,16 @@ export function Header({
                 height: "100%",
                 backgroundColor: "rgba(0, 0, 0, 0.5)",
                 zIndex: 1040,
-                animation: "fadeIn 0.3s ease-in-out",
+                animation: isSettingsClosing ? "fadeOut 0.24s ease-in forwards" : "fadeIn 0.3s ease-in-out",
               }}
-              onClick={() => setIsSettingsOpen(false)}
+              onClick={closeSettings}
             />
-            <div className="modal d-block" tabIndex="-1" style={{ zIndex: 1050, animation: "slideDown 0.4s ease-out" }}>
+            <div className={`modal d-block ${isSettingsClosing ? "taskease-modal-exit" : "taskease-modal-enter"}`} tabIndex="-1" style={{ zIndex: 1050 }}>
               <div className="modal-dialog" style={{ marginTop: "60px" }}>
                 <div className="modal-content" style={{ backgroundColor: pageBg }}>
                   <div className="modal-header">
                     <h2 className="modal-title fs-6">{t.settings}</h2>
-                    <button type="button" className="btn-close" onClick={() => setIsSettingsOpen(false)} />
+                    <button type="button" className="btn-close" onClick={closeSettings} />
                   </div>
                   <div className="modal-body">
               <div className="d-grid gap-3">
@@ -265,9 +297,20 @@ export function Header({
                   <>
                     <button className="btn btn-sm" type="button" onClick={() => {
                       onOpenProfileSettings();
-                      setIsSettingsOpen(false);
+                      closeSettings();
                     }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
                       {t.profileSettings}
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      onClick={() => {
+                        onOpenAbout?.();
+                        closeSettings();
+                      }}
+                      style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}
+                    >
+                      {t.aboutUs}
                     </button>
                     <button 
                       className="btn btn-sm" 
@@ -277,7 +320,9 @@ export function Header({
                         setIsManualSyncLoading(true);
                         try {
                           const ok = await onManualSync();
-                          if (ok) setIsSettingsOpen(false);
+                          if (ok) closeSettings();
+                        } catch {
+                          // Swallow unexpected async channel errors from browser extensions.
                         } finally {
                           setIsManualSyncLoading(false);
                         }
@@ -294,12 +339,25 @@ export function Header({
                     </button>
                   </>
                 ) : (
-                  <button className="btn btn-sm" type="button" onClick={() => {
-                    onLoginClick("login");
-                    setIsSettingsOpen(false);
-                  }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
-                    {t.login} / {t.register}
-                  </button>
+                  <>
+                    <button className="btn btn-sm" type="button" onClick={() => {
+                      onLoginClick("login");
+                      closeSettings();
+                    }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
+                      {t.login} / {t.register}
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      onClick={() => {
+                        onOpenAbout?.();
+                        closeSettings();
+                      }}
+                      style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}
+                    >
+                      {t.aboutUs}
+                    </button>
+                  </>
                 )}
 
                 {user ? (
@@ -308,7 +366,7 @@ export function Header({
                     setIsLogoutLoading(true);
                     try {
                       const ok = await onLogout();
-                      if (ok) setIsSettingsOpen(false);
+                      if (ok) closeSettings();
                     } finally {
                       setIsLogoutLoading(false);
                     }
