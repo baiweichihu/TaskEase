@@ -33,6 +33,26 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideUpFade {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-32px);
+    opacity: 0;
+  }
+}
+
 /* Modal Backdrop */
 .modal-backdrop {
   animation: fadeIn 0.3s ease-in-out;
@@ -111,4 +131,168 @@ input[type="range"].taskease-range:focus {
 
 input[type="range"].taskease-range:focus-visible::-webkit-slider-thumb {
   box-shadow: 0 0 0 3px rgba(201, 160, 8, 0.45);
+}
+
+.task-item-actions {
+  align-self: flex-start;
+}
+
+.taskease-modal-enter {
+  animation: slideDown 0.28s ease-out;
+}
+
+.taskease-modal-exit {
+  animation: slideUpFade 0.24s ease-in forwards;
+}
+
+.te-view-stage {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.te-view-stage.te-view-out {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.te-view-stage.te-view-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.te-task-row {
+  transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.te-task-row.te-task-fade-out {
+  opacity: 0;
+}
+
+.te-task-row.te-task-fade-in {
+  opacity: 0;
+  animation: fadeIn 0.28s ease-in-out forwards;
+}
+
+.te-task-row.te-task-exit-left {
+  opacity: 0;
+  transform: translateX(-56px);
+}
+
+.taskease-calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 0.75rem;
+}
+
+.taskease-calendar-grid-wrap {
+  min-width: 0;
+}
+
+.taskease-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.taskease-calendar-weekday {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 700;
+  padding: 0.2rem;
+}
+
+.taskease-calendar-cell {
+  min-height: 110px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 0.35rem;
+  background: rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+}
+
+.taskease-calendar-cell.is-muted {
+  opacity: 0.45;
+}
+
+.taskease-calendar-cell.is-selected {
+  border-color: rgba(226, 174, 28, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(226, 174, 28, 0.55);
+}
+
+.taskease-calendar-day {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.taskease-calendar-task {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  text-align: left;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.3rem;
+  background: rgba(242, 200, 75, 0.35);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.taskease-calendar-more {
+  font-size: 0.72rem;
+  color: #666;
+}
+
+.taskease-calendar-side {
+  background: rgba(255, 255, 255, 0.42);
+  max-height: 520px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.taskease-calendar-side-task {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 0.3rem 0.4rem;
+  cursor: grab;
+}
+
+@media (max-width: 991px) {
+  .taskease-calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .taskease-calendar-side {
+    max-height: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .task-item-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: 0;
+  }
+
+  .taskease-calendar-grid {
+    gap: 0.2rem;
+  }
+
+  .taskease-calendar-weekday {
+    font-size: 0.72rem;
+  }
+
+  .taskease-calendar-cell {
+    min-height: 86px;
+    padding: 0.2rem;
+  }
+
+  .taskease-calendar-day {
+    font-size: 0.75rem;
+  }
+
+  .taskease-calendar-task {
+    font-size: 0.65rem;
+    padding: 0.05rem 0.2rem;
+  }
 }

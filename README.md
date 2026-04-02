@@ -2,18 +2,19 @@
 
 ## 简体中文
 
-**TaskEase** 是一个现代化的任务清单网页应用，采用 React + Vite + Bootstrap 技术栈，提供实时日期时间看板、任务筛选、批量操作、多语言支持与 Supabase 云同步功能。
+**TaskEase** 是一个现代化的任务清单网页应用，采用 React + Vite + Bootstrap 技术栈，提供实时日期时间看板、任务筛选、日历管理、多语言支持与 Supabase 云同步功能。
 
 ### 🎯 核心特性
 
 - **现代化技术栈：** React 18 + Vite 5 + Bootstrap 5 + Supabase
 - **用户认证：** 用户名/密码注册登录（内部映射至 Supabase）
-- **题目管理：** 添加、编辑、删除、批量操作；丰富元数据（预估工时、截止日期、优先级、标签、备注）
+- **任务管理：** 添加、编辑、删除；丰富元数据（预估工时、截止日期、优先级、标签、备注、重复规则）
 - **自适应主题：** 浅色/深色/跟随系统，主题切换自动应用所有区域
 - **多语言支持：** 简体中文 / 繁体中文 / 英文，用户偏好持久化
 - **实时时钟：** 每秒更新的日期时间看板
-- **云端同步：** Supabase 自动同步（离线时自动回退本地存储）
-- **批量操作：** 一次性完成多个任务或删除
+- **云端同步：** 本地优先操作，仅在手动/自动同步时与 Supabase 合并
+- **日历管理：** 点击日期查看当天侧边详情，支持拖拽任务到日期格快速改期
+- **重复任务：** 支持每天 / 每周 / 每月重复，完成后自动生成下一次任务
 - **响应式设计：** Bootstrap 5 适配各类屏幕尺寸
 - **富通知体验：** 顶部 Toast 通知条，错误/成功消息自动消失
 
@@ -94,7 +95,9 @@ TaskEase/
 - 数据库架构
 - 主题系统设计
 - 本地与云端存储策略
-- 批量操作
+- 日历管理与拖拽改期
+- 本地优先 + 同步合并策略（删除优先、偏好以本地为准）
+- 重复任务自动续期
 - 国际化实现
 
 ### 🗄️ 数据库
@@ -131,7 +134,8 @@ TaskEase/
 - **顶部栏：** 主题切换 + 设置下拉菜单 + 登录按钮
 - **中心看板：** 大号日期 + 实时时钟 + 任务统计
 - **任务筛选：** 全部 | 进行中 | 已完成（黄色按钮）
-- **任务列表：** 任务项卡片，支持完成/删除，在批量模式下支持选择
+- **任务列表：** 任务项卡片，支持完成/删除与快速编辑
+- **日历视图：** 支持点击日期查看当天任务侧边详情，并可拖拽调整日期
 - **特殊状态：** 所有任务完成时显示庆祝 emoji
 
 ### 🤝 贡献
@@ -146,18 +150,19 @@ MIT License
 
 ## English
 
-**TaskEase** is a modern task-list web application built with React + Vite + Bootstrap, offering a live date/time dashboard, task filtering, batch operations, multi-language support, and optional Supabase cloud synchronization.
+**TaskEase** is a modern task-list web application built with React + Vite + Bootstrap, offering a live date/time dashboard, task filtering, calendar management, multi-language support, and local-first data management with optional Supabase synchronization.
 
 ### 🎯 Key Features
 
 - **Modern Stack:** React 18 + Vite 5 + Bootstrap 5 + Supabase
 - **User Auth:** Username/password registration and login (mapped to Supabase)
-- **Task Management:** Create, edit, delete, batch operations; rich metadata (estimated hours, deadline, priority, label, remarks)
+- **Task Management:** Create, edit, delete; rich metadata (estimated hours, deadline, priority, label, remarks, repeat rule)
 - **Adaptive Theme:** Light/dark/system modes; theme switches apply instantly across UI
 - **Multi-Language:** Simplified Chinese / Traditional Chinese / English; user preferences persist
 - **Live Clock:** Real-time date/time board updating every second
-- **Cloud Sync:** Automatic Supabase synchronization; falls back to local storage offline
-- **Batch Operations:** Complete or delete multiple tasks at once
+- **Cloud Sync:** Local-first operations; sync with Supabase only during manual/auto sync
+- **Calendar Management:** Click a date to open side details and drag tasks to date cells for quick rescheduling
+- **Recurring Tasks:** Daily / weekly / monthly recurrence with auto-next task generation on completion
 - **Responsive Design:** Bootstrap 5 adapts to all screen sizes
 - **Rich Notifications:** Toast notification bar at top; error/success messages auto-dismiss
 
@@ -238,7 +243,9 @@ See [docs/FEATURES.md](docs/FEATURES.md) for comprehensive documentation includi
 - Database schema
 - Theme system design
 - Local and cloud storage strategy
-- Batch operations
+- Calendar management with side details and drag rescheduling
+- Local-first data flow with merge-on-sync (deletions take precedence; preferences use local values)
+- Recurring task automation
 - Internationalization implementation
 
 ### 🗄️ Database
@@ -275,7 +282,8 @@ See [docs/FEATURES.md](docs/FEATURES.md) for comprehensive documentation includi
 - **Header:** Theme switcher + settings dropdown + login button
 - **Hero Dashboard:** Large date display + live clock + task statistics
 - **Task Filters:** All | Active | Completed (yellow buttons)
-- **Task List:** Task cards with complete/delete actions; checkbox support in batch mode
+- **Task List:** Task cards with complete/delete/edit actions
+- **Calendar View:** Date grid with side panel and drag-to-date scheduling
 - **Special State:** Celebration emoji when all tasks are done
 
 ### 🤝 Contributing

@@ -27,7 +27,7 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
     // 1. 测试连接
     setDiagnostics(prev => ({ ...prev, connection: "testing" }));
     try {
-      const { data, error } = await supabase.from(PROFILE_TABLE).select("count").limit(1);
+      const { error } = await supabase.from(PROFILE_TABLE).select("count").limit(1);
       if (error) throw error;
       setDiagnostics(prev => ({ ...prev, connection: "success" }));
       setDetails(prev => ({ ...prev, connection: "连接成功" }));
@@ -111,7 +111,7 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
     setDiagnostics(prev => ({ ...prev, testQuery: "testing" }));
     try {
       const testUsername = `test_${Date.now()}`;
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from(PROFILE_TABLE)
         .upsert({ 
           user_id: user.id, 

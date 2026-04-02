@@ -10,6 +10,7 @@ import {
   Toast,
   ConfirmModal,
   PomodoroTimer,
+  AboutModal,
 } from "./components";
 
 // OTP验证模态框组件
@@ -116,6 +117,7 @@ const PREFERENCES_TABLE = "user_preferences";
 
 const STATUS_PENDING = "pending";
 const STATUS_DONE = "done";
+const STATUS_DELETED = "deleted";
 
 const GUEST_KEY = "taskease_todos_guest";
 const THEME_KEY = "taskease_theme_mode";
@@ -124,9 +126,12 @@ const CUSTOM_BG_KEY = "taskease_custom_bg";
 const LANG_KEY = "taskease_lang";
 const CLOCK_KEY = "taskease_clock_format";
 const AUTO_SYNC_KEY = "taskease_auto_sync_enabled";
+const LAST_SYNC_AT_KEY_PREFIX = "taskease_last_sync_at_";
 const PENDING_USERNAME_KEY_PREFIX = "taskease_pending_username_";
 const USERNAME_CACHE_KEY_PREFIX = "taskease_username_cache_";
 const GUEST_LABELS_KEY = "taskease_task_labels_guest";
+const PROJECT_REPO_URL = "https://github.com/baiweichihu/TaskEase";
+const SUPABASE_SINGLETON_KEY = "__taskease_supabase_client__";
 
 function getThemeColors(preset, tone) {
   const themes = {
@@ -193,14 +198,10 @@ const TEXT = {
     confirmPassword: "确认密码",
     close: "关闭",
     addTask: "添加任务",
-    batchSelect: "批量选择",
     save: "保存",
     all: "全部",
     active: "进行中",
     done: "已完成",
-    markDone: "标记完成",
-    deleteSelected: "删除选中",
-    exitBatch: "退出批量",
     noTask: "暂无任务",
     allDone: "🎉🎉🎉 所有任务均已完成！好好休息一下吧！🎉🎉🎉",
     edit: "编辑",
@@ -214,11 +215,10 @@ const TEXT = {
     addFallback: "云端添加失败，已写入本地。",
     updateRollback: "更新失败，已回滚。",
     deleteRollback: "删除失败，已回滚。",
-    batchUpdateRollback: "批量更新失败，已回滚。",
-    batchDeleteRollback: "批量删除失败，已回滚。",
     supabaseMissing: "Supabase 未连接。",
     invalidLogin: "请输入有效邮箱和密码。",
     loginFailed: "登录失败，请检查邮箱或密码。",
+    loginSuccess: "登录成功。",
     invalidEmail: "请输入有效邮箱地址。",
     invalidUsername: "用户名需为 1-15 个字符，可包含中文、大小写和任意符号。",
     shortPassword: "密码至少 6 位。",
@@ -238,6 +238,22 @@ const TEXT = {
     authRateLimitHint: "验证邮件发送过于频繁，请稍后再试。",
     cancel: "取消",
     addTaskSubmit: "添加",
+    addSuccess: "任务已添加。",
+    duplicateTaskTitle: "检测到重复任务",
+    duplicateTaskMessage: "已存在相同标题和截止时间的任务。确定仍要添加吗？",
+    duplicateTaskConfirm: "仍然添加",
+    viewNormal: "默认视图",
+    viewByDue: "截止排序",
+    viewByPriority: "优先级排序",
+    viewCalendar: "日历视图",
+    viewDueNoDdl: "未设置截止时间（按创建时间）",
+    viewDueHasDdl: "已设置截止时间（按截止时间）",
+    calendarPrev: "上月",
+    calendarNext: "下月",
+    calendarWeekdays: ["日", "一", "二", "三", "四", "五", "六"],
+    calendarSideTitle: "当天任务",
+    calendarNoTasks: "当天暂无任务",
+    calendarDragHint: "可将任务拖到日期格，快速调整日期。",
     addFieldTitle: "标题",
     planWork: "自动规划",
     planWorkTitle: "工作时间自动规划",
@@ -258,13 +274,9 @@ const TEXT = {
     saveChanges: "保存",
     addTaskHintTitle: "添加任务规则说明",
     addTaskHint: "· 标题为必填项。\n· 预计小时、截止时间、优先级均为选填。\n· 若以上三项全部留空，自动规划不会纳入该任务。\n· 仅填部分字段时，规划会结合已有信息并推测所需工时。",
-    tagSearchPlaceholder: "搜索或选择标签",
     tagAddNew: "＋新增",
     newTagPrompt: "新标签名称",
-    tagNone: "（未选）",
-    tagSelected: "当前标签",
-    tagClear: "清除",
-    tagPickHint: "点击选用",
+    tagNone: "无",
     optionalPlaceholder: "选填",
     progress: "进度",
     remHours: "预计剩余时长",
@@ -300,6 +312,7 @@ const TEXT = {
     syncSuccess: "同步成功。",
     syncNeedLogin: "当前会话不可用，请重新登录后再同步。",
     syncFailed: "同步失败",
+    syncBusyPrefix: "同步被占用，当前持有者",
     syncing: "同步中...",
     syncNow: "云同步",
     submitting: "提交中...",
@@ -312,12 +325,32 @@ const TEXT = {
     titlePlaceholder: "任务标题",
     estHours: "预计任务时长",
     dueAt: "截止时间",
+    dueTimeDefaultHint: "若时间栏留空则默认为当日23:59。",
     label: "标签",
     priority: "优先级",
     priorityOpt0: "0（未指定）",
     priorityOpt1: "1（最优先）",
     priorityOpt2: "2（次优先）",
     priorityOpt3: "3（不是很优先）",
+    repeat: "重复",
+    repeatNone: "不重复",
+    repeatDaily: "每天",
+    repeatWeekly: "每周",
+    repeatMonthly: "每月",
+    repeatUntilDate: "重复截止日期",
+    repeatUntilHint: "按天设置，最长 365 天。",
+    repeatUntilRequired: "请设置重复截止日期。",
+    repeatUntilBeforeStart: "重复截止日期不能早于开始日期。",
+    repeatUntilMaxDaysError: "重复期限最多 365 天。",
+    recurrenceCreateFallback: "重复任务已添加到本地，云端写入失败。",
+    aboutUs: "关于我们",
+    aboutSummary: "TaskEase 是一个现代化任务管理网页，帮助你更高效地安排每日工作。",
+    aboutFeatureAuth: "支持账号注册登录与个人数据隔离。",
+    aboutFeatureCalendar: "提供日历视图和拖拽改期。",
+    aboutFeatureRecurring: "支持每日/每周/每月重复任务。",
+    aboutFeatureSync: "支持本地存储与 Supabase 云同步。",
+    aboutFeatureI18n: "支持简体中文、繁体中文与英文。",
+    aboutRepo: "GitHub 仓库",
     remark: "备注",
     weekdays: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
   },
@@ -356,14 +389,10 @@ const TEXT = {
     confirmPassword: "確認密碼",
     close: "關閉",
     addTask: "新增任務",
-    batchSelect: "批次選擇",
     save: "儲存",
     all: "全部",
     active: "進行中",
     done: "已完成",
-    markDone: "標記完成",
-    deleteSelected: "刪除選取",
-    exitBatch: "退出批次",
     noTask: "暫無任務",
     allDone: "🎉🎉🎉 所有任務均已完成！好好休息一下吧！🎉🎉🎉",
     edit: "編輯",
@@ -377,11 +406,10 @@ const TEXT = {
     addFallback: "雲端新增失敗，已寫入本地。",
     updateRollback: "更新失敗，已回滾。",
     deleteRollback: "刪除失敗，已回滾。",
-    batchUpdateRollback: "批次更新失敗，已回滾。",
-    batchDeleteRollback: "批次刪除失敗，已回滾。",
     supabaseMissing: "Supabase 未連線。",
     invalidLogin: "請輸入有效電子郵件與密碼。",
     loginFailed: "登入失敗，請檢查電子郵件或密碼。",
+    loginSuccess: "登入成功。",
     invalidEmail: "請輸入有效電子郵件地址。",
     invalidUsername: "使用者名稱需為 1-15 個字元，可包含中文、大小寫與任意符號。",
     shortPassword: "密碼至少 6 碼。",
@@ -401,6 +429,22 @@ const TEXT = {
     authRateLimitHint: "驗證郵件傳送過於頻繁，請稍後再試。",
     cancel: "取消",
     addTaskSubmit: "新增",
+    addSuccess: "任務已新增。",
+    duplicateTaskTitle: "偵測到重複任務",
+    duplicateTaskMessage: "已存在相同標題與截止時間的任務。仍要新增嗎？",
+    duplicateTaskConfirm: "仍然新增",
+    viewNormal: "預設檢視",
+    viewByDue: "截止排序",
+    viewByPriority: "優先級排序",
+    viewCalendar: "日曆檢視",
+    viewDueNoDdl: "未設定截止時間（依建立時間）",
+    viewDueHasDdl: "已設定截止時間（依截止時間）",
+    calendarPrev: "上月",
+    calendarNext: "下月",
+    calendarWeekdays: ["日", "一", "二", "三", "四", "五", "六"],
+    calendarSideTitle: "當天任務",
+    calendarNoTasks: "當天暫無任務",
+    calendarDragHint: "可將任務拖到日期格，快速調整日期。",
     addFieldTitle: "標題",
     planWork: "自動規劃",
     planWorkTitle: "工作時間自動規劃",
@@ -421,10 +465,9 @@ const TEXT = {
     saveChanges: "儲存",
     addTaskHintTitle: "新增任務規則說明",
     addTaskHint: "· 標題為必填。\n· 預計小時、截止時間、優先級皆為選填。\n· 若以上三項全部留空，自動規劃不會納入該任務。\n· 僅填部分欄位時，規劃會結合已有資訊並推測所需工時。",
-    tagSearchPlaceholder: "搜尋或選擇標籤",
     tagAddNew: "＋新增",
     newTagPrompt: "新標籤名稱",
-    tagNone: "（未選）",
+    tagNone: "無",
     progress: "進度",
     remHours: "預計剩餘時長",
     remarkPrefix: "備註: ",
@@ -459,6 +502,7 @@ const TEXT = {
     syncSuccess: "同步成功。",
     syncNeedLogin: "目前會話不可用，請重新登入後再同步。",
     syncFailed: "同步失敗",
+    syncBusyPrefix: "同步被占用，目前持有者",
     syncing: "同步中...",
     syncNow: "雲端同步",
     submitting: "提交中...",
@@ -471,12 +515,32 @@ const TEXT = {
     titlePlaceholder: "任務標題",
     estHours: "預計任務時長",
     dueAt: "截止時間",
+    dueTimeDefaultHint: "若時間欄留空則預設為當日23:59。",
     label: "標籤",
     priority: "優先級",
     priorityOpt0: "0（未指定）",
     priorityOpt1: "1（最優先）",
     priorityOpt2: "2（次優先）",
     priorityOpt3: "3（不是很優先）",
+    repeat: "重複",
+    repeatNone: "不重複",
+    repeatDaily: "每天",
+    repeatWeekly: "每週",
+    repeatMonthly: "每月",
+    repeatUntilDate: "重複截止日期",
+    repeatUntilHint: "以天為單位，最長 365 天。",
+    repeatUntilRequired: "請設定重複截止日期。",
+    repeatUntilBeforeStart: "重複截止日期不能早於開始日期。",
+    repeatUntilMaxDaysError: "重複期限最多 365 天。",
+    recurrenceCreateFallback: "重複任務已新增到本機，雲端寫入失敗。",
+    aboutUs: "關於我們",
+    aboutSummary: "TaskEase 是一個現代化任務管理網頁，幫助你更有效率地安排每日工作。",
+    aboutFeatureAuth: "支援帳號註冊登入與個人資料隔離。",
+    aboutFeatureCalendar: "提供日曆檢視與拖曳改期。",
+    aboutFeatureRecurring: "支援每日/每週/每月重複任務。",
+    aboutFeatureSync: "支援本機儲存與 Supabase 雲端同步。",
+    aboutFeatureI18n: "支援簡體中文、繁體中文與英文。",
+    aboutRepo: "GitHub 倉庫",
     remark: "備註",
     weekdays: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
   },
@@ -499,9 +563,6 @@ const TEXT = {
     customBgSortName: "File name",
     customBgEmpty: "No backgrounds yet. Click \"+\" to add one.",
     customBgAddNew: "Add file",
-    or: "Or",
-    confirm: "Confirm",
-    customBgLocalFile: "Local file",
     or: "or",
     confirm: "Confirm",
     language: "Language",
@@ -518,14 +579,10 @@ const TEXT = {
     confirmPassword: "Confirm Password",
     close: "Close",
     addTask: "Add Task",
-    batchSelect: "Batch Select",
     save: "Save",
     all: "All",
     active: "Active",
     done: "Completed",
-    markDone: "Mark Done",
-    deleteSelected: "Delete Selected",
-    exitBatch: "Exit Batch",
     noTask: "No tasks",
     allDone: "🎉🎉🎉 All tasks are completed! Take a good break! 🎉🎉🎉",
     edit: "Edit",
@@ -539,11 +596,10 @@ const TEXT = {
     addFallback: "Cloud add failed. Saved locally.",
     updateRollback: "Update failed and rolled back.",
     deleteRollback: "Delete failed and rolled back.",
-    batchUpdateRollback: "Batch update failed and rolled back.",
-    batchDeleteRollback: "Batch delete failed and rolled back.",
     supabaseMissing: "Supabase unavailable.",
     invalidLogin: "Please enter a valid email and password.",
     loginFailed: "Login failed. Check email/password.",
+    loginSuccess: "Login successful.",
     invalidEmail: "Please enter a valid email address.",
     invalidUsername: "Username must be 1-15 characters. Any characters are allowed.",
     shortPassword: "Password must be at least 6 characters.",
@@ -563,6 +619,22 @@ const TEXT = {
     authRateLimitHint: "Too many verification emails were sent. Please wait and try again.",
     cancel: "Cancel",
     addTaskSubmit: "Add",
+    addSuccess: "Task added.",
+    duplicateTaskTitle: "Duplicate Task Detected",
+    duplicateTaskMessage: "A task with the same title and due time already exists. Add it anyway?",
+    duplicateTaskConfirm: "Add Anyway",
+    viewNormal: "Default View",
+    viewByDue: "Due Sort",
+    viewByPriority: "Priority Sort",
+    viewCalendar: "Calendar",
+    viewDueNoDdl: "No Due Time (Created Earliest First)",
+    viewDueHasDdl: "With Due Time (Nearest Due First)",
+    calendarPrev: "Prev",
+    calendarNext: "Next",
+    calendarWeekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    calendarSideTitle: "Tasks On Date",
+    calendarNoTasks: "No tasks on this date",
+    calendarDragHint: "Drag tasks to a date cell to reschedule quickly.",
     addFieldTitle: "Title",
     planWork: "Auto plan",
     planWorkTitle: "Plan your work session",
@@ -583,13 +655,9 @@ const TEXT = {
     saveChanges: "Save",
     addTaskHintTitle: "Rules for adding tasks",
     addTaskHint: "· Title is required.\n· Estimated hours, due time, and priority are optional.\n· If all three are left empty, auto-plan will skip this task.\n· If only some are set, planning uses them and infers effort when needed.",
-    tagSearchPlaceholder: "Search or pick a label",
     tagAddNew: "+ New",
     newTagPrompt: "New label name",
-    tagNone: "(none)",
-    tagSelected: "Selected",
-    tagClear: "Clear",
-    tagPickHint: "Click to use",
+    tagNone: "None",
     optionalPlaceholder: "Optional",
     progress: "Progress",
     remHours: "Estimated remaining duration",
@@ -625,6 +693,7 @@ const TEXT = {
     syncSuccess: "Sync completed.",
     syncNeedLogin: "Session is invalid. Please sign in again before syncing.",
     syncFailed: "Sync failed",
+    syncBusyPrefix: "Sync is locked by",
     syncing: "Syncing...",
     syncNow: "Cloud sync",
     submitting: "Submitting...",
@@ -637,12 +706,32 @@ const TEXT = {
     titlePlaceholder: "Task title",
     estHours: "Estimated task duration",
     dueAt: "Due time",
+    dueTimeDefaultHint: "If time is left empty, it defaults to 23:59 on that date.",
     label: "Label",
     priority: "Priority",
     priorityOpt0: "0 (Unspecified)",
     priorityOpt1: "1 (Highest)",
     priorityOpt2: "2 (High)",
     priorityOpt3: "3 (Lower)",
+    repeat: "Repeat",
+    repeatNone: "None",
+    repeatDaily: "Daily",
+    repeatWeekly: "Weekly",
+    repeatMonthly: "Monthly",
+    repeatUntilDate: "Repeat until",
+    repeatUntilHint: "Set by day, up to 365 days.",
+    repeatUntilRequired: "Please set a repeat end date.",
+    repeatUntilBeforeStart: "Repeat end date cannot be earlier than start date.",
+    repeatUntilMaxDaysError: "Repeat duration can be at most 365 days.",
+    recurrenceCreateFallback: "Recurring task added locally, cloud insert failed.",
+    aboutUs: "About",
+    aboutSummary: "TaskEase is a modern task management web app that helps you organize daily work efficiently.",
+    aboutFeatureAuth: "Account sign up/login with per-user data isolation.",
+    aboutFeatureCalendar: "Calendar view with drag-to-reschedule.",
+    aboutFeatureRecurring: "Daily/weekly/monthly recurring tasks.",
+    aboutFeatureSync: "Local storage with optional Supabase cloud sync.",
+    aboutFeatureI18n: "Supports Simplified Chinese, Traditional Chinese, and English.",
+    aboutRepo: "GitHub Repository",
     remark: "Remark",
     weekdays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
   },
@@ -654,7 +743,19 @@ function buildSupabaseClient() {
   const valid = /^https:\/\/.+\.supabase\.co$/i.test(SUPABASE_URL.trim()) && SUPABASE_KEY.trim();
   if (!valid) return null;
   try {
-    return createClient(SUPABASE_URL, SUPABASE_KEY);
+    const globalScope = globalThis;
+    if (globalScope[SUPABASE_SINGLETON_KEY]) {
+      return globalScope[SUPABASE_SINGLETON_KEY];
+    }
+
+    const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        storageKey: "taskease-auth-token",
+      },
+    });
+
+    globalScope[SUPABASE_SINGLETON_KEY] = client;
+    return client;
   } catch {
     return null;
   }
@@ -696,11 +797,29 @@ function isAuthRateLimitError(error) {
 
 function isTransientLockError(error) {
   const message = String(error?.message || "");
-  return message.includes("Lock broken by another request") || message.includes("AbortError");
+  return (
+    message.includes("Lock broken by another request") ||
+    message.includes("AbortError") ||
+    message.includes("NavigatorLockAcquireTimeoutError") ||
+    message.includes("was not released within") ||
+    message.includes("lock:")
+  );
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withLockRetry(task, retries = 1, waitMs = 220) {
+  try {
+    return await task();
+  } catch (error) {
+    if (retries > 0 && isTransientLockError(error)) {
+      await sleep(waitMs);
+      return withLockRetry(task, retries - 1, waitMs);
+    }
+    throw error;
+  }
 }
 
 function withTimeout(promise, ms = 10000) {
@@ -716,12 +835,17 @@ function readLocalTodos(key) {
     const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({
-      ...item,
-      progress_percent: snapProgress(item?.progress_percent),
-      estimated_hours: Number(item?.estimated_hours ?? 0),
-      priority: Number(item?.priority ?? 0),
-    }));
+    return parsed.map((item) => {
+      const parsedRepeat = parseRemarkAndRepeat(item?.remark ?? "");
+      return {
+        ...item,
+        remark: parsedRepeat.remark,
+        repeat_rule: normalizeRepeatRule(item?.repeat_rule ?? parsedRepeat.repeat_rule),
+        progress_percent: snapProgress(item?.progress_percent),
+        estimated_hours: Number(item?.estimated_hours ?? 0),
+        priority: Number(item?.priority ?? 0),
+      };
+    });
   } catch {
     return [];
   }
@@ -729,6 +853,33 @@ function readLocalTodos(key) {
 
 function writeLocalTodos(key, todos) {
   localStorage.setItem(key, JSON.stringify(todos));
+}
+
+function getLastSyncAt(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return "";
+  return String(localStorage.getItem(`${LAST_SYNC_AT_KEY_PREFIX}${id}`) || "").trim();
+}
+
+function setLastSyncAt(userId, value) {
+  const id = String(userId || "").trim();
+  const ts = String(value || "").trim();
+  if (!id || !ts) return;
+  localStorage.setItem(`${LAST_SYNC_AT_KEY_PREFIX}${id}`, ts);
+}
+
+function readAllLocalTodos() {
+  try {
+    const keys = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key) continue;
+      if (key === GUEST_KEY || key.startsWith("taskease_todos_")) keys.push(key);
+    }
+    return mergeTodoLists(...keys.map((key) => readLocalTodos(key)));
+  } catch {
+    return [];
+  }
 }
 
 function getPendingUsernameByEmail(email) {
@@ -784,10 +935,90 @@ function snapProgress(v) {
 }
 
 function toDatetimeLocalValue(iso) {
-  const d = new Date(iso);
+  if (iso == null) return "";
+  const raw = String(iso).trim();
+  if (!raw) return "";
+  const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function toDateAndTimeLocalParts(iso) {
+  const value = toDatetimeLocalValue(iso);
+  if (!value || !value.includes("T")) return { date: "", time: "" };
+  const [date, time] = value.split("T");
+  return { date: date || "", time: time || "" };
+}
+
+function buildDueIso(dateValue, timeValue) {
+  const date = String(dateValue || "").trim();
+  if (!date) return null;
+  const time = String(timeValue || "").trim() || "23:59";
+  const d = new Date(`${date}T${time}`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+const REPEAT_MARKER_REGEX = /\[repeat:(none|daily|weekly|monthly)\]/gi;
+const REPEAT_UNTIL_MARKER_REGEX = /\[repeat-until:(\d{4}-\d{2}-\d{2})\]/gi;
+
+function normalizeRepeatRule(rule) {
+  const value = String(rule || "none").trim().toLowerCase();
+  if (value === "daily" || value === "weekly" || value === "monthly") return value;
+  return "none";
+}
+
+function normalizeRepeatUntilDate(dateValue) {
+  const value = String(dateValue || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function toDateKeyFromIso(value) {
+  const d = new Date(value || "");
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function parseRemarkAndRepeat(rawRemark) {
+  const value = String(rawRemark || "");
+  const repeatMatch = [...value.matchAll(REPEAT_MARKER_REGEX)].pop();
+  const untilMatch = [...value.matchAll(REPEAT_UNTIL_MARKER_REGEX)].pop();
+  const repeat_rule = normalizeRepeatRule(repeatMatch?.[1] || "none");
+  const repeat_until_date = normalizeRepeatUntilDate(untilMatch?.[1] || "");
+  const remark = value.replace(REPEAT_MARKER_REGEX, "").replace(REPEAT_UNTIL_MARKER_REGEX, "").trim();
+  return { remark, repeat_rule, repeat_until_date };
+}
+
+function composeRemarkAndRepeat(rawRemark, repeatRule, repeatUntilDate = "") {
+  const repeat = normalizeRepeatRule(repeatRule);
+  const until = normalizeRepeatUntilDate(repeatUntilDate);
+  const plainRemark = String(rawRemark || "")
+    .replace(REPEAT_MARKER_REGEX, "")
+    .replace(REPEAT_UNTIL_MARKER_REGEX, "")
+    .trim();
+  if (repeat === "none") return plainRemark;
+  if (until) return `${plainRemark} [repeat:${repeat}] [repeat-until:${until}]`.trim();
+  return `${plainRemark} [repeat:${repeat}]`.trim();
+}
+
+function getNextRecurringDdl(ddl, repeatRule) {
+  const rule = normalizeRepeatRule(repeatRule);
+  if (rule === "none" || !ddl) return null;
+  const base = new Date(ddl);
+  if (Number.isNaN(base.getTime())) return null;
+
+  const next = new Date(base);
+  if (rule === "daily") next.setDate(base.getDate() + 1);
+  else if (rule === "weekly") next.setDate(base.getDate() + 7);
+  else if (rule === "monthly") next.setMonth(base.getMonth() + 1);
+
+  return next.toISOString();
 }
 
 function parseTaskLabels(raw) {
@@ -807,20 +1038,55 @@ function parseTaskLabels(raw) {
 }
 
 function mapTodo(row) {
-  const status = row.status ?? STATUS_PENDING;
+  const rawStatus = String(row.status ?? STATUS_PENDING).trim();
+  const status = rawStatus === STATUS_DELETED ? STATUS_DELETED : rawStatus;
+  const { remark, repeat_rule, repeat_until_date } = parseRemarkAndRepeat(row.remark ?? "");
   return {
     id: row.id,
     title: row.title || "",
     status,
     estimated_hours: Number(row.estimated_hours ?? 0),
     ddl: row.ddl ?? null,
-    remark: row.remark ?? "",
+    remark,
+    repeat_rule,
+    repeat_until_date,
     priority: Number(row.priority ?? 0),
     label: row.label ?? "",
     progress_percent: snapProgress(row.progress_percent ?? 0),
     user_id: row.user_id,
     created_at: row.created_at,
+    local_dirty: Boolean(row.local_dirty),
+    local_updated_at: row.local_updated_at || "",
+    deleted_at: row.deleted_at || "",
   };
+}
+
+function isTodoLocallyDirtyOrNew(todo, lastSyncAt) {
+  if (!todo || typeof todo !== "object") return false;
+  if (todo.status === STATUS_DELETED) return true;
+  if (todo.local_dirty) return true;
+  const localUpdatedAt = String(todo.local_updated_at || "").trim();
+  if (localUpdatedAt && (!lastSyncAt || localUpdatedAt > lastSyncAt)) return true;
+  const createdAt = String(todo.created_at || "").trim();
+  if (createdAt && (!lastSyncAt || createdAt > lastSyncAt)) return true;
+  return false;
+}
+
+function toTs(value, fallback = 0) {
+  const ts = new Date(value || "").getTime();
+  return Number.isFinite(ts) ? ts : fallback;
+}
+
+function mergeTodoLists(...lists) {
+  const merged = new Map();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const todo of list) {
+      if (!todo || !todo.id) continue;
+      merged.set(todo.id, { ...merged.get(todo.id), ...todo });
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => toTs(b.created_at) - toTs(a.created_at));
 }
 
 function getClockParts(now, lang, hourFormat) {
@@ -872,6 +1138,7 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPlanWorkModalOpen, setIsPlanWorkModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -897,27 +1164,31 @@ export default function App() {
 
   const [notice, setNotice] = useState({ text: "", warning: false });
 
-  const [batchMode, setBatchMode] = useState(false);
   const [filter, setFilter] = useState("all");
-  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [viewMode, setViewMode] = useState("normal");
 
   const [draft, setDraft] = useState({
     title: "",
     estimated_hours: "",
-    ddl: "",
+    ddlDate: "",
+    ddlTime: "",
     label: "",
     priority: "",
+    repeat_rule: "none",
+    repeat_until_date: "",
     remark: "",
   });
 
   const [editingTodoId, setEditingTodoId] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
+  const [pendingDuplicatePayload, setPendingDuplicatePayload] = useState(null);
   const [taskLabels, setTaskLabels] = useState([]);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const previousUserIdRef = useRef(null);
   const authSyncSeqRef = useRef(0);
   const autoSyncInFlightRef = useRef(false);
+  const syncGuardRef = useRef({ owner: "", startedAt: 0, token: "" });
   const migrationPromptShownForUserRef = useRef(null);
   const ignoreAuthEventsUntilRef = useRef(0);
   const isLogoutInProgressRef = useRef(false);
@@ -939,6 +1210,28 @@ export default function App() {
     window.setTimeout(() => {
       setNotice((prev) => (prev.text === text ? { text: "", warning: false } : prev));
     }, 4500);
+  }
+
+  function tryAcquireSyncGuard(source) {
+    const now = Date.now();
+    const current = syncGuardRef.current;
+    if (current?.token) {
+      return {
+        ok: false,
+        holder: current.owner || "unknown",
+        elapsedMs: Math.max(0, now - Number(current.startedAt || now)),
+        token: "",
+      };
+    }
+    const token = `${source}-${now}-${Math.random().toString(36).slice(2, 8)}`;
+    syncGuardRef.current = { owner: source, startedAt: now, token };
+    return { ok: true, holder: source, elapsedMs: 0, token };
+  }
+
+  function releaseSyncGuard(token) {
+    const current = syncGuardRef.current;
+    if (!current?.token || current.token !== token) return;
+    syncGuardRef.current = { owner: "", startedAt: 0, token: "" };
   }
 
   function pushDiag() {
@@ -999,9 +1292,11 @@ export default function App() {
   useEffect(() => {
     if (!supabase) {
       notify(t.localOnly, true);
-      setTodos(readLocalTodos(storageKey));
+      setTodos(readAllLocalTodos());
       return;
     }
+
+    setTodos(readAllLocalTodos());
 
     let mounted = true;
 
@@ -1015,16 +1310,13 @@ export default function App() {
       }
 
       setUser(current);
-      setSelectedIds(new Set());
-      setBatchMode(false);
 
       if (!current) {
         pushDiag("authSync", "no_user_reset", { event, seq });
         isLogoutInProgressRef.current = false;
         ignoreAuthEventsUntilRef.current = 0;
-        setPreferencesLoaded(false);
         setUsername("");
-        setTodos(readLocalTodos(GUEST_KEY));
+        setTodos(readAllLocalTodos());
         previousUserIdRef.current = null;
         autoSyncInFlightRef.current = false;
         setIsMigratePromptOpen(false);
@@ -1039,7 +1331,6 @@ export default function App() {
 
       const switchedUser = previousUserIdRef.current !== current.id;
       if (switchedUser) {
-        setPreferencesLoaded(false);
         previousUserIdRef.current = current.id;
       }
 
@@ -1088,50 +1379,38 @@ export default function App() {
 
       if (!mounted || seq !== authSyncSeqRef.current) return;
 
-      try {
-        pushDiag("authSync", "todos_load_start", { seq, userId: current.id });
-        const nextTodos = await withTimeout(loadTodosForUser(current.id), OP_TIMEOUT_MS);
-        if (!mounted || seq !== authSyncSeqRef.current) return;
-        pushDiag("authSync", "todos_load_success", { seq, userId: current.id, count: nextTodos.length });
-        setTodos(nextTodos);
-        writeLocalTodos(`taskease_todos_${current.id}`, nextTodos);
+      const localOnlyTodos = mergeTodoLists(readLocalTodos(`taskease_todos_${current.id}`), readLocalTodos(GUEST_KEY));
+      pushDiag("authSync", "todos_load_local_only", { seq, userId: current.id, count: localOnlyTodos.length });
+      setTodos(localOnlyTodos);
+      writeLocalTodos(`taskease_todos_${current.id}`, localOnlyTodos);
 
-        const guestTodos = readLocalTodos(GUEST_KEY);
-        if (
-          nextTodos.length === 0 &&
-          guestTodos.length > 0 &&
-          migrationPromptShownForUserRef.current !== current.id
-        ) {
-          migrationPromptShownForUserRef.current = current.id;
-          setIsMigratePromptOpen(true);
-          pushDiag("migration", "prompt_open", { userId: current.id, guestCount: guestTodos.length });
-        }
-      } catch (err) {
-        const isTimeout = String(err?.message || "") === "TIMEOUT";
-        const fallback = readLocalTodos(`taskease_todos_${current.id}`);
-        pushDiag(
-          "authSync",
-          isTimeout ? "todos_load_timeout" : "todos_load_error",
-          { seq, userId: current.id, error: String(err?.message || err), fallbackCount: fallback.length },
-          "warn",
-        );
-        if (mounted && seq === authSyncSeqRef.current) {
-          setTodos(fallback);
-        }
+      if (
+        localOnlyTodos.length === 0 &&
+        readLocalTodos(GUEST_KEY).length > 0 &&
+        migrationPromptShownForUserRef.current !== current.id
+      ) {
+        migrationPromptShownForUserRef.current = current.id;
+        setIsMigratePromptOpen(true);
+        pushDiag("migration", "prompt_open", { userId: current.id, guestCount: readLocalTodos(GUEST_KEY).length });
       }
 
       if (!mounted || seq !== authSyncSeqRef.current) return;
-      setPreferencesLoaded(true);
       pushDiag("authSync", "done", { seq, userId: current.id });
     }
 
     async function initSession() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!mounted) return;
-
-      await applySession(session?.user ?? null, "INITIAL_GET_SESSION");
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!mounted) return;
+        await applySession(session?.user ?? null, "INITIAL_GET_SESSION");
+      } catch (error) {
+        if (!mounted) return;
+        if (!isTransientLockError(error)) {
+          pushDiag("authSync", "init_session_error", { error: String(error?.message || error) }, "warn");
+        }
+      }
     }
 
     initSession();
@@ -1139,7 +1418,13 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      await applySession(session?.user ?? null, event);
+      try {
+        await applySession(session?.user ?? null, event);
+      } catch (error) {
+        if (!isTransientLockError(error)) {
+          pushDiag("authSync", "auth_listener_error", { event, error: String(error?.message || error) }, "warn");
+        }
+      }
     });
 
     return () => {
@@ -1168,13 +1453,17 @@ export default function App() {
 
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
+      if (todo.status === STATUS_DELETED) return false;
       if (filter === "active") return todo.status !== STATUS_DONE;
       if (filter === "done") return todo.status === STATUS_DONE;
       return true;
     });
   }, [todos, filter]);
 
-  const pendingTodos = useMemo(() => todos.filter((item) => item.status !== STATUS_DONE), [todos]);
+  const pendingTodos = useMemo(
+    () => todos.filter((item) => item.status !== STATUS_DONE && item.status !== STATUS_DELETED),
+    [todos],
+  );
 
   const estimateHours = useMemo(() => {
     const sum = pendingTodos.reduce((acc, item) => acc + Number(item.estimated_hours || 0), 0);
@@ -1182,23 +1471,22 @@ export default function App() {
   }, [pendingTodos]);
 
   const mergedTaskLabels = useMemo(() => {
-    const fromTodos = todos.map((x) => String(x.label || "").trim()).filter(Boolean);
+    const fromTodos = todos
+      .filter((x) => x.status !== STATUS_DELETED)
+      .map((x) => String(x.label || "").trim())
+      .filter(Boolean);
     const set = new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), ...fromTodos]);
     return Array.from(set).sort((a, b) => a.localeCompare(b, lang));
   }, [todos, taskLabels, lang]);
 
   const clock = getClockParts(now, lang, clockFormat);
 
-  function yellowButtonStyle(active) {
-    return {
-      backgroundColor: active ? "#e0ae1c" : "#f2c84b",
-      color: "#2b2b2b",
-      borderColor: active ? "#d39d0c" : "#e9bd34",
-    };
-  }
-
-  async function loadTodosForUser(userId) {
+  async function loadTodosForUser(userId, options = {}) {
+    const { includeLocal = true } = options;
     if (!supabase || !userId) return readLocalTodos(GUEST_KEY);
+
+    const localUserTodos = readLocalTodos(`taskease_todos_${userId}`);
+    const guestTodos = readLocalTodos(GUEST_KEY);
 
     let result = await supabase
       .from(TODO_TABLE)
@@ -1223,10 +1511,11 @@ export default function App() {
       if (!isTransientLockError(error)) {
         notify(`${t.syncFallback} ${error.message || ""}`.trim(), true);
       }
-      return readLocalTodos(`taskease_todos_${userId}`);
+      return includeLocal ? mergeTodoLists(guestTodos, localUserTodos) : [];
     }
 
-    return (Array.isArray(data) ? data : []).map(mapTodo);
+    const cloudMapped = (Array.isArray(data) ? data : []).map(mapTodo);
+    return includeLocal ? mergeTodoLists(cloudMapped, guestTodos, localUserTodos) : cloudMapped;
   }
 
   async function loadPreferences(userId) {
@@ -1269,22 +1558,17 @@ export default function App() {
     try {
       pushDiag("prefSync", "start", { userId, keys: Object.keys(prefs || {}) });
 
-      const sessionResult = await withTimeout(supabase.auth.getSession(), 5000);
-      const session = sessionResult?.data?.session || null;
-      if (!session?.access_token) {
-        pushDiag("prefSync", "skip_no_session", { userId }, "warn");
-        return false;
-      }
-
-      const { error } = await withTimeout(
-        supabase.from(PREFERENCES_TABLE).upsert(
-          {
-            user_id: userId,
-            ...prefs,
-          },
-          { onConflict: "user_id" },
+      const { error } = await withLockRetry(() =>
+        withTimeout(
+          supabase.from(PREFERENCES_TABLE).upsert(
+            {
+              user_id: userId,
+              ...prefs,
+            },
+            { onConflict: "user_id" },
+          ),
+          OP_TIMEOUT_MS,
         ),
-        OP_TIMEOUT_MS,
       );
 
       if (error) {
@@ -1363,9 +1647,12 @@ export default function App() {
     setDraft({
       title: "",
       estimated_hours: "",
-      ddl: "",
+      ddlDate: "",
+      ddlTime: "",
       label: "",
       priority: "",
+      repeat_rule: "none",
+      repeat_until_date: "",
       remark: "",
     });
   }
@@ -1377,13 +1664,17 @@ export default function App() {
   }
 
   function openEditTodo(todo) {
+    const dueParts = toDateAndTimeLocalParts(todo.ddl);
     setEditingTodoId(todo.id);
     setDraft({
       title: todo.title || "",
       estimated_hours: Number(todo.estimated_hours) > 0 ? String(todo.estimated_hours) : "",
-      ddl: todo.ddl ? toDatetimeLocalValue(todo.ddl) : "",
+      ddlDate: dueParts.date,
+      ddlTime: dueParts.time,
       label: todo.label || "",
       priority: Number(todo.priority) > 0 ? String(todo.priority) : "",
+      repeat_rule: normalizeRepeatRule(todo.repeat_rule),
+      repeat_until_date: normalizeRepeatUntilDate(todo.repeat_until_date),
       remark: todo.remark || "",
     });
     setIsAddModalOpen(true);
@@ -1392,6 +1683,8 @@ export default function App() {
   function closeAddModal() {
     setIsAddModalOpen(false);
     setEditingTodoId(null);
+    setDuplicateConfirmOpen(false);
+    setPendingDuplicatePayload(null);
     resetDraft();
   }
 
@@ -1412,7 +1705,18 @@ export default function App() {
     setDraft((p) => ({ ...p, label: trimmed }));
   }
 
-  async function handleTaskFormSubmit(event) {
+  function isDuplicateTodo(title, ddl) {
+    const normalizedTitle = String(title || "").trim();
+    const normalizedDdl = ddl || null;
+    return todos.some((todo) => {
+      const todoTitle = String(todo?.title || "").trim();
+      const todoDdl = todo?.ddl || null;
+      return todoTitle === normalizedTitle && todoDdl === normalizedDdl;
+    });
+  }
+
+  async function handleTaskFormSubmit(event, options = {}) {
+    const { skipDuplicateCheck = false, draftOverride = null } = options;
     event.preventDefault();
     const startedAt = Date.now();
     pushDiag("taskSubmit", "submit_enter", {
@@ -1444,24 +1748,53 @@ export default function App() {
     }, SUBMIT_WATCHDOG_MS);
 
     try {
-      const title = draft.title.trim();
+      const sourceDraft = draftOverride || draft;
+      const title = String(sourceDraft.title || "").trim();
       if (!title) {
         pushDiag("taskSubmit", "validation_empty_title", {});
         notify(t.emptyTitle, true);
         return;
       }
 
-      const estRaw = String(draft.estimated_hours ?? "").trim();
+      const estRaw = String(sourceDraft.estimated_hours ?? "").trim();
       const estimated_hours = estRaw === "" ? 0 : Math.max(0, Number(estRaw));
-      const ddl = draft.ddl ? new Date(draft.ddl).toISOString() : null;
-      const priRaw = String(draft.priority ?? "").trim();
+      const ddl = buildDueIso(sourceDraft.ddlDate, sourceDraft.ddlTime);
+      const priRaw = String(sourceDraft.priority ?? "").trim();
       const priority = priRaw === "" ? 0 : Math.max(0, Math.min(10, Number(priRaw)));
-      const label = String(draft.label ?? "").trim() || null;
-      const remark = String(draft.remark ?? "").trim() || null;
+      const repeat_rule = normalizeRepeatRule(sourceDraft.repeat_rule);
+      const repeat_until_date = repeat_rule === "none" ? "" : normalizeRepeatUntilDate(sourceDraft.repeat_until_date);
+      const label = String(sourceDraft.label ?? "").trim() || null;
+
+      if (repeat_rule !== "none") {
+        if (!repeat_until_date) {
+          notify(t.repeatUntilRequired, true);
+          return;
+        }
+        const startDateKey = normalizeRepeatUntilDate(sourceDraft.ddlDate) || toDateKeyFromIso(new Date().toISOString());
+        const startDate = new Date(`${startDateKey}T00:00:00`);
+        const endDate = new Date(`${repeat_until_date}T00:00:00`);
+        const dayDiff = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000);
+        if (dayDiff < 0) {
+          notify(t.repeatUntilBeforeStart, true);
+          return;
+        }
+        if (dayDiff > 365) {
+          notify(t.repeatUntilMaxDaysError, true);
+          return;
+        }
+      }
+
+      const remark = composeRemarkAndRepeat(sourceDraft.remark, repeat_rule, repeat_until_date) || null;
+
+      if (!editingTodoId && !skipDuplicateCheck && isDuplicateTodo(title, ddl)) {
+        setPendingDuplicatePayload(sourceDraft);
+        setDuplicateConfirmOpen(true);
+        return;
+      }
 
       if (editingTodoId) {
         pushDiag("taskSubmit", "edit_start", { todoId: editingTodoId });
-        const patch = { title, estimated_hours, ddl, remark, priority, label };
+        const patch = { title, estimated_hours, ddl, remark, repeat_rule, repeat_until_date, priority, label };
         await updateTodo(editingTodoId, patch);
         pushDiag("taskSubmit", "edit_success", { todoId: editingTodoId });
         closeAddModal();
@@ -1479,61 +1812,18 @@ export default function App() {
         label,
         progress_percent: 0,
         created_at: new Date().toISOString(),
+        local_dirty: true,
+        local_updated_at: new Date().toISOString(),
       };
 
-      if (supabase && user) {
-        pushDiag("taskSubmit", "cloud_insert_start", { userId: user.id, taskId: payload.id });
-        let data;
-        let error;
-        try {
-          const result = await withTimeout(
-            supabase
-              .from(TODO_TABLE)
-              .insert(payload)
-              .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
-              .single(),
-            OP_TIMEOUT_MS,
-          );
-          data = result.data;
-          error = result.error;
-        } catch (timeoutError) {
-          if (String(timeoutError?.message || "") === "TIMEOUT") {
-            pushDiag("taskSubmit", "cloud_insert_timeout", { userId: user.id, taskId: payload.id }, "error");
-            notify(t.requestTimeout, true);
-            return;
-          }
-          throw timeoutError;
-        }
-
-        if (!error && data) {
-          pushDiag("taskSubmit", "cloud_insert_success", { userId: user.id, taskId: payload.id });
-          const next = [mapTodo(data), ...todos];
-          setTodos(next);
-          syncLocal(next);
-          closeAddModal();
-          notify(t.addSuccess, false);
-          return;
-        }
-
-        pushDiag("taskSubmit", "cloud_insert_error", { userId: user.id, taskId: payload.id, error: error?.message || "unknown" }, "error");
-        notify(`${t.addFallback} ${error?.message || ""}`.trim(), true);
-      } else {
-        // Local-only mode
-        pushDiag("taskSubmit", "local_insert", { taskId: payload.id });
-        payload.user_id = null;
-        const next = [mapTodo(payload), ...todos];
-        setTodos(next);
-        syncLocal(next);
-        closeAddModal();
-        notify(t.addSuccess, false);
-        return;
-      }
-
+      // Local-first mode: add task immediately to local store.
+      pushDiag("taskSubmit", "local_insert", { taskId: payload.id });
+      payload.user_id = user?.id || null;
       const next = [mapTodo(payload), ...todos];
       setTodos(next);
       syncLocal(next);
       closeAddModal();
-      pushDiag("taskSubmit", "fallback_local_after_cloud_error", { taskId: payload.id }, "warn");
+      notify(t.addSuccess, false);
     } catch (err) {
       pushDiag("taskSubmit", "submit_exception", { error: String(err?.message || err) }, "error");
       notify(`操作失败: ${err.message}`, true);
@@ -1542,6 +1832,15 @@ export default function App() {
       setIsSubmittingTask(false);
       pushDiag("taskSubmit", "submit_exit", { elapsedMs: Date.now() - startedAt });
     }
+  }
+
+  function handleDuplicateConfirm() {
+    const queuedDraft = pendingDuplicatePayload;
+    setDuplicateConfirmOpen(false);
+    setPendingDuplicatePayload(null);
+    if (!queuedDraft) return;
+    const fakeEvent = { preventDefault() {} };
+    void handleTaskFormSubmit(fakeEvent, { skipDuplicateCheck: true, draftOverride: queuedDraft });
   }
 
   function handleTaskSubmitProbe(stage) {
@@ -1554,39 +1853,102 @@ export default function App() {
 
   async function updateTodo(id, patch) {
     const previous = todos;
+    const targetBefore = previous.find((item) => item.id === id);
+    if (!targetBefore) return;
+
     const nextPatch = { ...patch };
     if (nextPatch.progress_percent != null) {
       nextPatch.progress_percent = snapProgress(nextPatch.progress_percent);
     }
-    const next = todos.map((item) => (item.id === id ? { ...item, ...nextPatch } : item));
-    setTodos(next);
 
-    if (supabase && user) {
-      const dbPatch = Object.fromEntries(Object.entries(nextPatch).filter(([, v]) => v !== undefined));
-      const { error } = await supabase.from(TODO_TABLE).update(dbPatch).eq("id", id).eq("user_id", user.id);
-      if (error) {
-        setTodos(previous);
-        notify(`${t.updateRollback} ${error.message || ""}`.trim(), true);
-        return;
-      }
+    const hasRepeatPatch = Object.prototype.hasOwnProperty.call(nextPatch, "repeat_rule");
+    const hasRepeatUntilPatch = Object.prototype.hasOwnProperty.call(nextPatch, "repeat_until_date");
+    const hasRemarkPatch = Object.prototype.hasOwnProperty.call(nextPatch, "remark");
+    const effectiveRepeat = normalizeRepeatRule(hasRepeatPatch ? nextPatch.repeat_rule : targetBefore.repeat_rule);
+    const effectiveRepeatUntil = normalizeRepeatUntilDate(
+      hasRepeatUntilPatch ? nextPatch.repeat_until_date : targetBefore.repeat_until_date,
+    );
+
+    if (hasRepeatPatch || hasRepeatUntilPatch || hasRemarkPatch) {
+      const rawRemark = hasRemarkPatch ? nextPatch.remark : targetBefore.remark;
+      nextPatch.remark = composeRemarkAndRepeat(rawRemark, effectiveRepeat, effectiveRepeatUntil) || null;
+      nextPatch.repeat_rule = effectiveRepeat;
+      nextPatch.repeat_until_date = effectiveRepeatUntil;
     }
 
+    const uiPatch = { ...nextPatch };
+    if (hasRepeatPatch || hasRepeatUntilPatch || hasRemarkPatch) {
+      const parsed = parseRemarkAndRepeat(uiPatch.remark ?? targetBefore.remark);
+      uiPatch.remark = parsed.remark;
+      uiPatch.repeat_rule = normalizeRepeatRule(uiPatch.repeat_rule ?? parsed.repeat_rule);
+      uiPatch.repeat_until_date = normalizeRepeatUntilDate(uiPatch.repeat_until_date ?? parsed.repeat_until_date);
+    }
+
+    const localUpdateTs = new Date().toISOString();
+    const next = previous.map((item) =>
+      item.id === id
+        ? { ...item, ...uiPatch, local_dirty: true, local_updated_at: localUpdateTs }
+        : item,
+    );
+    setTodos(next);
+
     syncLocal(next);
+
+    const nextStatus = Object.prototype.hasOwnProperty.call(uiPatch, "status") ? uiPatch.status : targetBefore.status;
+    const repeatRule = normalizeRepeatRule(uiPatch.repeat_rule ?? targetBefore.repeat_rule);
+    const shouldGenerateRecurring =
+      targetBefore.status !== STATUS_DONE &&
+      nextStatus === STATUS_DONE &&
+      repeatRule !== "none";
+
+    if (shouldGenerateRecurring) {
+      const baseTodo = { ...targetBefore, ...uiPatch, repeat_rule: repeatRule };
+      const repeatUntilDate = normalizeRepeatUntilDate(baseTodo.repeat_until_date);
+      const nextRecurringDdl = getNextRecurringDdl(baseTodo.ddl, repeatRule);
+      if (repeatUntilDate && nextRecurringDdl) {
+        const nextDateKey = toDateKeyFromIso(nextRecurringDdl);
+        if (nextDateKey && nextDateKey > repeatUntilDate) {
+          return;
+        }
+      }
+      const nextRecurringPayload = {
+        id: crypto.randomUUID(),
+        title: baseTodo.title,
+        status: STATUS_PENDING,
+        estimated_hours: Number(baseTodo.estimated_hours || 0),
+        ddl: nextRecurringDdl,
+        remark: composeRemarkAndRepeat(baseTodo.remark, repeatRule, repeatUntilDate) || null,
+        priority: Number(baseTodo.priority || 0),
+        label: baseTodo.label || null,
+        progress_percent: 0,
+        created_at: new Date().toISOString(),
+        user_id: user?.id || null,
+        local_dirty: true,
+        local_updated_at: new Date().toISOString(),
+      };
+
+      const localRecurring = mapTodo(nextRecurringPayload);
+      setTodos((prev) => {
+        const merged = [localRecurring, ...prev];
+        syncLocal(merged);
+        return merged;
+      });
+    }
   }
 
   async function handleDelete(id) {
-    const previous = todos;
-    const next = todos.filter((item) => item.id !== id);
+    const next = todos.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            status: STATUS_DELETED,
+            deleted_at: new Date().toISOString(),
+            local_dirty: true,
+            local_updated_at: new Date().toISOString(),
+          }
+        : item,
+    );
     setTodos(next);
-
-    if (supabase && user) {
-      const { error } = await supabase.from(TODO_TABLE).delete().eq("id", id).eq("user_id", user.id);
-      if (error) {
-        setTodos(previous);
-        notify(`${t.deleteRollback} ${error.message || ""}`.trim(), true);
-        return;
-      }
-    }
 
     syncLocal(next);
   }
@@ -1597,56 +1959,6 @@ export default function App() {
     await handleDelete(id);
     setConfirmDeleteOpen(false);
     closeAddModal();
-  }
-
-  async function handleBatchDone() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) {
-      notify(t.batchUpdateRollback, true);
-      return;
-    }
-
-    const previous = todos;
-    const selected = new Set(ids);
-    const next = todos.map((item) => (selected.has(item.id) ? { ...item, status: STATUS_DONE } : item));
-    setTodos(next);
-
-    if (supabase && user) {
-      const { error } = await supabase.from(TODO_TABLE).update({ status: STATUS_DONE }).in("id", ids).eq("user_id", user.id);
-      if (error) {
-        setTodos(previous);
-        notify(`${t.batchUpdateRollback} ${error.message || ""}`.trim(), true);
-        return;
-      }
-    }
-
-    setSelectedIds(new Set());
-    syncLocal(next);
-  }
-
-  async function handleBatchDelete() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) {
-      notify(t.batchDeleteRollback, true);
-      return;
-    }
-
-    const previous = todos;
-    const selected = new Set(ids);
-    const next = todos.filter((item) => !selected.has(item.id));
-    setTodos(next);
-
-    if (supabase && user) {
-      const { error } = await supabase.from(TODO_TABLE).delete().in("id", ids).eq("user_id", user.id);
-      if (error) {
-        setTodos(previous);
-        notify(`${t.batchDeleteRollback} ${error.message || ""}`.trim(), true);
-        return;
-      }
-    }
-
-    setSelectedIds(new Set());
-    syncLocal(next);
   }
 
   async function handleLogin(event) {
@@ -1697,6 +2009,7 @@ export default function App() {
     setIsAuthModalOpen(false);
     setLoginEmail("");
     setLoginPassword("");
+    notify(t.loginSuccess, false);
   }
 
   async function handleRegister(event) {
@@ -1910,9 +2223,6 @@ export default function App() {
     setUsername("");
     setTodos(readLocalTodos(GUEST_KEY));
     setIsAuthModalOpen(false);
-    setSelectedIds(new Set());
-    setBatchMode(false);
-    setPreferencesLoaded(false);
     previousUserIdRef.current = null;
     autoSyncInFlightRef.current = false;
     migrationPromptShownForUserRef.current = null;
@@ -2079,25 +2389,90 @@ export default function App() {
       return false;
     }
 
+    const guard = tryAcquireSyncGuard(source);
+    if (!guard.ok) {
+      const seconds = (guard.elapsedMs / 1000).toFixed(1);
+      if (source === "manual") {
+        notify(`${t.syncBusyPrefix}: ${guard.holder} (${seconds}s)`, true);
+      }
+      pushDiag("sync", "blocked_by_guard", { source, holder: guard.holder, elapsedMs: guard.elapsedMs }, "warn");
+      return false;
+    }
+
     if (autoSyncInFlightRef.current) {
       pushDiag("sync", "skip_in_flight", { source }, "warn");
+      releaseSyncGuard(guard.token);
       return false;
     }
 
     autoSyncInFlightRef.current = true;
     setIsSyncing(true);
     try {
-      const sessionResult = await withTimeout(supabase.auth.getSession(), 5000);
-      const session = sessionResult?.data?.session || null;
-      if (!session?.access_token) {
-        pushDiag("sync", "no_session", { source }, "warn");
-        if (source === "manual") notify(t.syncNeedLogin, true);
-        return false;
+      const localTodos = mergeTodoLists(readLocalTodos(`taskease_todos_${user.id}`), readLocalTodos(GUEST_KEY), todos);
+      const lastSyncAt = getLastSyncAt(user.id);
+      const dirtyTodos = localTodos.filter((x) => isTodoLocallyDirtyOrNew(x, lastSyncAt));
+
+      const deletedIds = dirtyTodos
+        .filter((x) => x.status === STATUS_DELETED)
+        .map((x) => String(x.id || "").trim())
+        .filter(Boolean);
+      const syncableTodos = dirtyTodos.filter((x) => x.status !== STATUS_DELETED);
+
+      if (deletedIds.length > 0) {
+        const deleteResult = await withLockRetry(
+          () => withTimeout(
+            supabase.from(TODO_TABLE).delete().eq("user_id", user.id).in("id", deletedIds),
+            OP_TIMEOUT_MS,
+          ),
+        );
+        if (deleteResult?.error) {
+          throw new Error(deleteResult.error.message || "Failed to delete tombstones from cloud");
+        }
       }
 
-      const cloudTodos = await withTimeout(loadTodosForUser(user.id), OP_TIMEOUT_MS);
-      setTodos(cloudTodos);
-      writeLocalTodos(storageKey, cloudTodos);
+      if (syncableTodos.length > 0) {
+        const rows = syncableTodos.map((x) => ({
+          id: x.id || crypto.randomUUID(),
+          title: String(x.title || "").trim() || "Untitled",
+          status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
+          estimated_hours: Number(x.estimated_hours ?? 0),
+          ddl: x.ddl || null,
+          remark: composeRemarkAndRepeat(x.remark, x.repeat_rule, x.repeat_until_date) || null,
+          priority: Number(x.priority ?? 0),
+          label: x.label || null,
+          progress_percent: snapProgress(x.progress_percent ?? 0),
+          created_at: x.created_at || new Date().toISOString(),
+          user_id: user.id,
+        }));
+
+        const upsertResult = await withLockRetry(
+          () => withTimeout(
+            supabase.from(TODO_TABLE).upsert(rows, { onConflict: "id" }),
+            OP_TIMEOUT_MS,
+          ),
+        );
+        if (upsertResult?.error) {
+          throw new Error(upsertResult.error.message || "Failed to upsert local changes to cloud");
+        }
+      }
+
+      const cloudTodos = await withLockRetry(() => withTimeout(loadTodosForUser(user.id, { includeLocal: false }), OP_TIMEOUT_MS));
+      const localUnsynced = localTodos.filter((x) => {
+        const id = String(x.id || "").trim();
+        if (!id) return false;
+        return isTodoLocallyDirtyOrNew(x, lastSyncAt) && x.status !== STATUS_DELETED;
+      });
+      const mergedTodos = mergeTodoLists(cloudTodos, localUnsynced).map((todo) => {
+        if (!todo || typeof todo !== "object") return todo;
+        const cleaned = { ...todo };
+        delete cleaned.local_dirty;
+        delete cleaned.local_updated_at;
+        delete cleaned.deleted_at;
+        return cleaned;
+      });
+      setTodos(mergedTodos);
+      writeLocalTodos(storageKey, mergedTodos);
+      setLastSyncAt(user.id, new Date().toISOString());
 
       await savePreferences(user.id, {
         language: lang,
@@ -2107,7 +2482,7 @@ export default function App() {
         auto_sync_enabled: autoSyncEnabled,
       });
 
-      pushDiag("sync", "success", { source, count: cloudTodos.length });
+      pushDiag("sync", "success", { source, count: mergedTodos.length });
       if (source === "manual") notify(t.syncSuccess, false);
       return true;
     } catch (error) {
@@ -2120,6 +2495,7 @@ export default function App() {
     } finally {
       autoSyncInFlightRef.current = false;
       setIsSyncing(false);
+      releaseSyncGuard(guard.token);
     }
   }
 
@@ -2157,7 +2533,7 @@ export default function App() {
           status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
           estimated_hours: Number(x.estimated_hours ?? 0),
           ddl: x.ddl || null,
-          remark: x.remark || null,
+          remark: composeRemarkAndRepeat(x.remark, x.repeat_rule) || null,
           priority: Number(x.priority ?? 0),
           label: x.label || null,
           progress_percent: snapProgress(x.progress_percent ?? 0),
@@ -2256,6 +2632,7 @@ export default function App() {
             }}
             onLogout={handleLogout}
             onOpenProfileSettings={() => setIsProfileModalOpen(true)}
+            onOpenAbout={() => setIsAboutModalOpen(true)}
             onManualSync={handleManualSync}
             isSyncing={isSyncing}
             autoSyncEnabled={autoSyncEnabled}
@@ -2267,20 +2644,17 @@ export default function App() {
 
         <TaskManager
           t={t}
+          lang={lang}
           clock={clock}
           pendingTodos={pendingTodos}
           estimateHours={estimateHours}
           filter={filter}
           setFilter={setFilter}
-          batchMode={batchMode}
-          setBatchMode={setBatchMode}
-          selectedIds={selectedIds}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
           visibleTodos={visibleTodos}
           onAddTask={openAddTaskModal}
           onOpenPlanWork={() => setIsPlanWorkModalOpen(true)}
-          onBatchSelect={setSelectedIds}
-          onBatchDone={handleBatchDone}
-          onBatchDelete={handleBatchDelete}
           panelBg={panelBg}
           listBg={listBg}
           themeColors={themeColors}
@@ -2349,6 +2723,21 @@ export default function App() {
         />
 
         <ConfirmModal
+          isOpen={duplicateConfirmOpen}
+          onClose={() => {
+            setDuplicateConfirmOpen(false);
+            setPendingDuplicatePayload(null);
+          }}
+          title={t.duplicateTaskTitle}
+          message={t.duplicateTaskMessage}
+          confirmLabel={t.duplicateTaskConfirm}
+          cancelLabel={t.cancel}
+          closeAriaLabel={t.close}
+          pageBg={pageBg}
+          onConfirm={handleDuplicateConfirm}
+        />
+
+        <ConfirmModal
           isOpen={isMigratePromptOpen}
           onClose={() => {
             if (!isMigratingLocalData) setIsMigratePromptOpen(false);
@@ -2382,6 +2771,7 @@ export default function App() {
           todos={todos}
           STATUS_DONE={STATUS_DONE}
           pageBg={pageBg}
+          themeColors={themeColors}
         />
 
         <ProfileSettingsModal
@@ -2395,6 +2785,14 @@ export default function App() {
           onUpdateEmail={handleUpdateEmail}
           onUpdateUsername={handleUpdateUsername}
           onResetPassword={handleResetPassword}
+        />
+
+        <AboutModal
+          isOpen={isAboutModalOpen}
+          onClose={() => setIsAboutModalOpen(false)}
+          t={t}
+          pageBg={pageBg}
+          repoUrl={PROJECT_REPO_URL}
         />
 
         <OtpModal

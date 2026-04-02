@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export function NetworkMonitor({ isOpen, onClose, user }) {
+export function NetworkMonitor({ isOpen, onClose, user: _user }) {
   const [requests, setRequests] = useState([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
 
@@ -94,7 +94,7 @@ export function NetworkMonitor({ isOpen, onClose, user }) {
       return originalOpen.apply(this, arguments);
     };
     
-    XMLHttpRequest.prototype.send = function(data) {
+    XMLHttpRequest.prototype.send = function(_data) {
       this.addEventListener('load', () => {
         const endTime = Date.now();
         const duration = endTime - this._startTime;

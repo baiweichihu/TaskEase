@@ -26,7 +26,8 @@ TaskEase is a modern browser-based task manager built with **React 18** + **Vite
 
 **Task Controls Row:**
 - **Left side:** Filter buttons (All | Active | Completed) with yellow styling, active state toggles
-- **Right side:** Add Task (green button) | Batch Select (blue button)
+- **Middle:** View buttons (Default | Due Sort | Priority Sort | Calendar)
+- **Right side:** Add Task + Auto Plan buttons
 
 **Task List:**
 - Expandable/togglable task items showing:
@@ -35,14 +36,14 @@ TaskEase is a modern browser-based task manager built with **React 18** + **Vite
   - Due datetime (if set)
   - Priority level (0-10)
   - Label/tag (if set)
+  - Repeat rule (if set)
   - Remarks/notes (if set)
-  - Checkbox for batch selection (when in batch mode)
 - Empty state: "暂无任务" with uplifting message when all done: 🎉🎉🎉
 
 **Special Elements:**
 - **Toast notification bar** (top-fixed position, auto-dismisses after 4.5s): Error/success messages
 - **Auth modal:** Two tabs (Login | Register) with validation
-- **Add Task modal:** Full form with title, estimated hours, due datetime, priority, label, remarks
+**Add Task Modal:** Full form with title, estimated hours, due datetime, priority, repeat rule, label, remarks
 
 ### 2.2 Authentication System
 - **Login/Register Modal:**
@@ -167,12 +168,14 @@ Located in top-right dropdown (⚙️ icon), contains:
 - Data persists only on current device/browser
 
 **Authenticated Mode (Logged In):**
-- Primary storage: Supabase `todos` table (RLS enforced per user_id)
-- Local cache: localStorage also updated for offline resilience
+- Primary runtime storage: localStorage (local-first)
+- Cloud storage: Supabase `todos` table (synced on demand)
 - Sync strategy:
-  1. Successful operation → update Supabase + update localStorage
-  2. Supabase fails → rollback UI state, show error toast, restore localStorage
-  3. Connection unavailable → fallback to localStorage, show "云同步失败，已回退本地" toast
+  1. Daily operations (add/edit/delete/complete) update localStorage immediately.
+  2. Manual/auto sync uploads only locally changed rows (`local_dirty`) to Supabase.
+  3. Deletions use local tombstone (`status=deleted`) and are deleted from cloud first during sync.
+  4. Sync then pulls cloud data and merges back to local cache.
+  5. User preferences are always pushed from local state to cloud during sync.
 
 **Supabase Row-Level Security (RLS):**
 - Users can only read/write/delete own todos (enforced at DB level)
@@ -183,12 +186,12 @@ Located in top-right dropdown (⚙️ icon), contains:
 **Create (Add Task):**
 - Opens modal with form: title, estimated_hours, ddl, priority, label, remark
 - Validation: title required, estimated_hours >= 0, priority 0-10
-- On save: Insert to Supabase (if authenticated) + localStorage
+- On save: Write to local storage immediately (cloud updated at sync time)
 - Success: Task appears at top of list, modal closes
 - Failure: Error toast, modal stays open
 
 **Read (Display):**
-- Fetch all user's todos from Supabase on app load
+- Restore local todos on app load (cloud is optional and merged during sync)
 - Apply filter (All/Active/Done) to display subset
 - Render metadata: title, hours, deadline, priority, label, remark
 - Live update: Changes from other sessions appear with socket/polling (optional future enhancement)
@@ -196,23 +199,24 @@ Located in top-right dropdown (⚙️ icon), contains:
 **Update (Edit):**
 - Click edit → prompt for new title (quick edit, legacy method)
 - Future: Full modal edit form (partially implemented, can be expanded)
-- On save: Update Supabase row + localStorage
-- Optimistic update: UI updates immediately, rollback on error
+- On save: Update local row immediately and mark it dirty for next sync
 
 **Delete:**
-- Click delete → immediate removal from UI
-- Soft delete not implemented; hard delete removes row permanently
-- RLS ensures only owner can delete
-- Failure: Rollback, show error toast
+- Click delete → local tombstone (`status=deleted`) so deleted items will not resurrect on sync
+- During sync, deleted tombstones are physically deleted from cloud first
 
-**Bulk Operations:**
-- **Batch Select Mode:** Top-right button enters mode, checkboxes appear on all tasks
-  - Click task to toggle checkbox
-  - Selected count shown
-  - "Mark Done" button: Update all selected to status=done
-  - "Delete Selected" button: Remove all selected
-  - Both operations: Optimistic update + Supabase sync + localStorage update + error rollback
-- Exit batch mode: "退出批量" button or filter click
+**Calendar Management:**
+- Calendar view renders month grid with due-task badges on each day.
+- Clicking a date opens a side panel that shows tasks for that day.
+- Drag and drop supported:
+  - Drag task to another calendar day to change date.
+  - Drag task to a date cell to quickly reschedule its date.
+- All drag operations reuse the same local-first update flow as task edits.
+
+**Recurring Tasks:**
+- Task form supports recurrence rule: none / daily / weekly / monthly.
+- Recurrence is persisted in existing `remark` field with an internal marker (no schema migration required).
+- When a recurring task is marked done, the next occurrence is generated automatically.
 
 ### 2.9 Notifications
 
@@ -253,14 +257,15 @@ React hooks manage:
 - `todos` (task array from Supabase or localStorage)
 - `filter` (current filter: all/active/done)
 - `isAuthModalOpen`, `isAddModalOpen` (modal visibility)
-- `batchMode`, `selectedIds` (batch operation state)
+- `viewMode`, `calendarCursor`, `selectedDateKey` (calendar interaction state)
 - `notice` (toast message and auto-dismiss timer)
+- `local_dirty`, `local_updated_at` (per-task local change tracking for selective sync)
 
 ### 3.2 Performance
 - Vite bundling: ~360KB JS (gzip ~104KB), ~44KB CSS (gzip)
 - CSS shipped with Bootstrap icons: ~134KB WOFF2, ~180KB WOFF
 - No excessive re-renders: React.memo, useMemo, useCallback strategies in place
-- Lazy loading: Only fetch todos on login
+- Local-first loading: restore local tasks instantly, then reconcile on sync
 
 ### 3.3 Browser Compatibility
 - Modern browsers: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
@@ -298,7 +303,9 @@ Migration script: `supabase/user_preferences.sql`
 - [ ] Run `npm run build` to generate production bundle
 - [ ] Deploy `dist/` folder to web hosting (Vercel, Netlify, etc.)
 - [ ] Test auth flow: register, login, logout
-- [ ] Test task CRUD: add, update, delete, batch operations
+- [ ] Test task CRUD: add, update, delete
+- [ ] Test calendar side-panel interactions and drag-to-reschedule
+- [ ] Test recurrence rules (daily/weekly/monthly) and auto-next generation
 - [ ] Test theme switching and language selection persistence
 - [ ] Test fallback behavior (disable Supabase temporarily to verify localStorage)
 
