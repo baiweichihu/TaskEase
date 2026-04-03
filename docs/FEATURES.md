@@ -77,12 +77,85 @@ Located in top-right dropdown (⚙️ icon), contains:
   - Persists to `user_preferences.clock_format`
   - Affects hero display time and task datetime formats
   
+- **Profile Settings button** (visible when authenticated):
+  - Opens independent modal for:
+    - View bound email (read-only, shown at top)
+    - Change username (1-15 characters, supports Chinese, symbols)
+    - Reset password (email link sent)
+  - Note: Email change functionality removed in v2.4
+  
+- **Data Statistics button** (visible when authenticated, NEW in v2.4):
+  - Click to view task completion statistics
+  - Shows two sections:
+    - 📊 All-time stats: Total completed tasks + total hours spent
+    - 📈 This week: Tasks completed in past 7 days + total hours spent
+  
 - **Logout button:**
   - Only visible when authenticated
   - Clears user session and reverts to guest mode
   - Confirmation optional (immediate logout)
 
-### 2.4 Task Data Model
+### 2.3.1 Profile Settings Modal
+Independent modal for authenticated users to manage their profile:
+- **Bound Email (read-only):**
+  - The currently bound account email is shown at the top of the modal
+  - Display-only field; cannot be edited from this modal
+- **Change Username:**
+  - Input field with 15-character limit
+  - Shows remaining characters counter
+  - Validates: username must be 1-15 chars (any characters allowed)
+- **Reset Password:**
+  - Triggers password reset email link via Supabase
+  - User follows email link to reset password
+- **Note:** Email update functionality was removed in v2.4 per UX refinement
+
+### 2.3.2 Data Statistics Modal (NEW in v2.4)
+New modal to display user task completion analytics:
+- **All-time Statistics:**
+  - Total number of completed tasks
+  - Total hours spent on completed tasks
+- **This Week Statistics:**
+  - Completed tasks in past 7 days
+  - Total hours spent on this week's completed tasks
+- **Presentation:**
+  - Clean stat boxes with emoji indicators (📊 and 📈)
+  - Responsive layout adapting to light/dark theme
+  - Displays only completed (STATUS_DONE) tasks
+
+### 2.4 Notification System (Enhanced in v2.4)
+Unified Toast notification component for user feedback:
+- **Visual Design:**
+  - Top-center fixed position
+  - Auto-dismisses after 4.5 seconds
+  - Success messages: green background
+  - Error messages: red background
+- **Events Triggering Notifications:**
+  - Login success
+  - Task added / edited / deleted
+  - Auto sync success (NEW in v2.4)
+  - Auto sync started (via UI button)
+  - Task edit success (NEW in v2.4)
+  - Theme/language/preference changes
+  - Migration success/failure
+- **Consistency:**
+  - All notifications use the same Toast.jsx component
+  - Unified styling across the app
+  - Consistent animation and timing
+
+### 2.5 Reusable Modal Animation Shell (NEW in v2.5)
+All major modal dialogs now share a reusable modal container component:
+- **Component:** `ModalShell.jsx`
+- **Unified behavior:**
+  - Fade-in on open (backdrop + dialog)
+  - Fade-out on close when clicking the top-right close icon
+  - Same timing and animation curve across dialogs
+- **Coverage:**
+  - Auth, Add Task, Plan Work, Profile Settings, Data Statistics, About
+  - Input/Confirm helper dialogs
+  - OTP verification dialog
+  - Diagnostic dialogs (network/database)
+
+### 2.6 Task Data Model
 
 **Database Schema (todos table):**
 | Field | Type | Required | Notes |
@@ -97,6 +170,9 @@ Located in top-right dropdown (⚙️ icon), contains:
 | `priority` | SMALLINT | No | Importance level (0-10, 0 = no priority) |
 | `label` | TEXT | No | Categorical tag (max 50 chars recommended) |
 | `remark` | TEXT | No | Task notes/description |
+| `repeat_rule` | TEXT | No | Recurrence rule: none/daily/weekly/monthly |
+| `repeat_until_date` | DATE | No | Recurrence end date (inclusive) |
+| `pomodoro_total_seconds` | INTEGER | No | Accumulated tracked seconds from timer |
 | `created_at` | TIMESTAMPTZ | Yes | Auto-set on insert |
 | `updated_at` | TIMESTAMPTZ | Yes | Auto-updated on row change |
 
@@ -110,7 +186,7 @@ Located in top-right dropdown (⚙️ icon), contains:
 | `created_at` | TIMESTAMPTZ | Yes | Auto-set on insert |
 | `updated_at` | TIMESTAMPTZ | Yes | Auto-updated on row change |
 
-### 2.5 Theme System
+### 2.7 Theme System
 
 **Design Philosophy:** Adaptive deep/light theming with computed "resolved" theme separate from user preference.
 
@@ -135,7 +211,7 @@ Located in top-right dropdown (⚙️ icon), contains:
 - When pending task count == 0: List displays 🎉🎉🎉 with celebratory message
 - List background lightens slightly to highlight achievement
 
-### 2.6 Internationalization (i18n)
+### 2.8 Internationalization (i18n)
 
 **Supported Languages:**
 1. **Simplified Chinese (zh-CN)** — Default
@@ -159,7 +235,7 @@ Located in top-right dropdown (⚙️ icon), contains:
 - Changing language via settings dropdown instantly re-renders all strings
 - No page reload required
 
-### 2.7 Local + Cloud Storage Strategy
+### 2.9 Local + Cloud Storage Strategy
 
 **Guest Mode (Not Logged In):**
 - All todos stored in browser localStorage (key: `taskease_todos_guest`)
@@ -181,7 +257,7 @@ Located in top-right dropdown (⚙️ icon), contains:
 - Users can only read/write/delete own todos (enforced at DB level)
 - Attempts to access other user's todos rejected by Supabase
 
-### 2.8 Task Operations
+### 2.10 Task Operations
 
 **Create (Add Task):**
 - Opens modal with form: title, estimated_hours, ddl, priority, label, remark
@@ -192,7 +268,7 @@ Located in top-right dropdown (⚙️ icon), contains:
 
 **Read (Display):**
 - Restore local todos on app load (cloud is optional and merged during sync)
-- Apply filter (All/Active/Done) to display subset
+- Apply composed filters (All/Active/Done + multi-label filter)
 - Render metadata: title, hours, deadline, priority, label, remark
 - Live update: Changes from other sessions appear with socket/polling (optional future enhancement)
 
@@ -215,10 +291,29 @@ Located in top-right dropdown (⚙️ icon), contains:
 
 **Recurring Tasks:**
 - Task form supports recurrence rule: none / daily / weekly / monthly.
-- Recurrence is persisted in existing `remark` field with an internal marker (no schema migration required).
+- Current implementation persists recurrence in explicit columns: `todos.repeat_rule` and `todos.repeat_until_date`.
+- Legacy remark markers are only parsed for compatibility during migration windows.
+- Add task modal shows a live preview of the next generated occurrence time.
+- Repeat validation is based on occurrence count (max 30), not fixed day-range.
 - When a recurring task is marked done, the next occurrence is generated automatically.
 
-### 2.9 Notifications
+### 2.11 Pomodoro Timer Integration
+- The pomodoro timer records elapsed time from a start timestamp instead of relying on interval tick counts.
+- Pause/resume uses accumulated seconds plus the current running segment, so background tab throttling will not lose actual time.
+- Timer progress and tracked duration are written to `todos.pomodoro_total_seconds` and reflected in task progress.
+- Task rows show a localized "Tracked / 已计时 / 已計時" label next to the timer button.
+- If recorded pomodoro time exceeds the estimated duration, the task progress display is capped at 100%.
+
+### 2.11.1 Data Statistics Split (Estimated vs Actual)
+- Data stats modal now reports both:
+  - Estimated duration sum (`estimated_hours`)
+  - Actual pomodoro tracked duration (`pomodoro_total_seconds` converted to hours)
+- Applies to both all-time and last-7-days sections.
+
+Schema policy note:
+- For structured feature data, this project prefers explicit database columns and migration scripts over hidden text markers.
+
+### 2.12 Notifications
 
 **Toast Bar (Top-fixed Position):**
 - Auto-dismisses after 4.5 seconds
@@ -230,7 +325,7 @@ Located in top-right dropdown (⚙️ icon), contains:
   
 **Implementation:** `notify(msg)` function sets state, schedules auto-dismiss timer
 
-### 2.10 Modals
+### 2.13 Modals
 
 **Auth Modal:**
 - Tabs: Login | Register
@@ -255,6 +350,7 @@ React hooks manage:
 - `user` (authenticated user object or null)
 - `username` (display name for authenticated user)
 - `todos` (task array from Supabase or localStorage)
+- `timerSession` (active pomodoro timer state, including accumulated seconds)
 - `filter` (current filter: all/active/done)
 - `isAuthModalOpen`, `isAddModalOpen` (modal visibility)
 - `viewMode`, `calendarCursor`, `selectedDateKey` (calendar interaction state)
@@ -314,7 +410,7 @@ Migration script: `supabase/user_preferences.sql`
 - Full task edit modal (title, estimated_hours, ddl, priority, label, remark)
 - Email verification flow for signups
 - Recurring task templates
-- Task search/filter by label or remark
+- Multi-label filtering in task list header (works with status filters)
 - Keyboard shortcuts (Esc to close modals, etc.)
 - Real-time sync via Supabase subscriptions
 - Task analytics (productivity dashboard, time tracking)

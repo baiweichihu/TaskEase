@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { countOccurrencesByRule, getNextRecurringIso, normalizeDateKey } from "./utils/recurrence";
 import {
   Header,
   TaskManager,
@@ -11,12 +12,12 @@ import {
   ConfirmModal,
   PomodoroTimer,
   AboutModal,
+  DataStatsModal,
+  ModalShell,
 } from "./components";
 
 // OTP验证模态框组件
 function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVerify, isVerifyingOtp, pageBg, themeColors }) {
-  if (!isOpen) return null;
-
   const customInputStyle = {
     backgroundColor: themeColors.listBg,
     borderColor: themeColors.softBtnBorder,
@@ -24,54 +25,13 @@ function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVeri
   };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div 
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1040,
-          animation: "fadeIn 0.3s ease-in-out",
-        }}
-      />
-      {/* Modal */}
-      <div 
-        className="modal d-block" 
-        tabIndex="-1"
-        style={{
-          animation: "slideDown 0.4s ease-out",
-          zIndex: 1050,
-        }}
-      >
-        <style>{`
-          @keyframes slideDown {
-            from {
-              transform: translateY(-50px);
-              opacity: 0;
-            }
-            to {
-              transform: translateY(0);
-              opacity: 1;
-            }
-          }
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-        `}</style>
+    <ModalShell isOpen={isOpen} onClose={onClose}>
+      {(requestClose) => (
         <div className="modal-dialog" style={{ marginTop: "60px" }}>
-          <div className="modal-content" style={{ backgroundColor: pageBg }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title fs-6">{t.otpModalTitle}</h2>
-              <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
+              <button type="button" className="btn-close" aria-label={t.close} onClick={requestClose} />
             </div>
             <div className="modal-body">
               <div className="mb-3">
@@ -104,8 +64,8 @@ function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVeri
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }
 
@@ -118,6 +78,7 @@ const PREFERENCES_TABLE = "user_preferences";
 const STATUS_PENDING = "pending";
 const STATUS_DONE = "done";
 const STATUS_DELETED = "deleted";
+const LABEL_FILTER_UNLABELED = "__UNLABELED__";
 
 const GUEST_KEY = "taskease_todos_guest";
 const THEME_KEY = "taskease_theme_mode";
@@ -202,6 +163,10 @@ const TEXT = {
     all: "全部",
     active: "进行中",
     done: "已完成",
+    labelFilter: "标签筛选",
+    labelFilterAll: "全部标签",
+    labelFilterNoLabel: "无标签",
+    labelFilterSelected: "已选标签",
     noTask: "暂无任务",
     allDone: "🎉🎉🎉 所有任务均已完成！好好休息一下吧！🎉🎉🎉",
     edit: "编辑",
@@ -294,6 +259,17 @@ const TEXT = {
     planAlgorithmHint:
       "算法步骤：\n1. 只纳入「进行中」且预计时长、截止时间、优先级至少填写过一项的任务。\n2. 按截止时间从早到晚排序；无截止时间排在后面；同一截止时间内按优先级数字从大到小。\n3. 若未填预计时长，根据是否填写截止、优先级推测所需工时。\n4. 按上述顺序将任务依次装入你输入的可用时长，直至时间用完或没有可装任务。",
     profileSettings: "个人资料设置",
+    emailBoundLabel: "已绑定邮箱",
+    dataStats: "数据统计",
+    dataStatsTitle: "数据统计",
+    allTimeStats: "累计统计",
+    weekStats: "最近一周",
+    completedTasks: "已完成任务",
+    totalHours: "任务时长",
+    estimatedHoursStat: "预计时长",
+    pomodoroHoursStat: "番茄钟时长",
+    statsDescription: "累计已完成的任务统计。最近一周基于过去7天内完成的任务。",
+    recordedTime: "已计时",
     updateEmail: "更改邮箱",
     updateUsername: "更改用户名",
     resetPassword: "重置密码",
@@ -312,8 +288,10 @@ const TEXT = {
     syncSuccess: "同步成功。",
     syncNeedLogin: "当前会话不可用，请重新登录后再同步。",
     syncFailed: "同步失败",
+    autoSyncSuccessNotice: "自动同步成功。",
     syncBusyPrefix: "同步被占用，当前持有者",
     syncing: "同步中...",
+    editTaskSuccess: "编辑任务成功。",
     syncNow: "云同步",
     submitting: "提交中...",
     migrateLocalTitle: "检测到本地数据",
@@ -338,10 +316,12 @@ const TEXT = {
     repeatWeekly: "每周",
     repeatMonthly: "每月",
     repeatUntilDate: "重复截止日期",
-    repeatUntilHint: "按天设置，最长 365 天。",
+    repeatUntilHint: "最多重复 30 次（含当前任务）。",
+    repeatNextPreview: "下次生成时间",
+    repeatNextPreviewEmpty: "请先设置截止日期和重复规则。",
     repeatUntilRequired: "请设置重复截止日期。",
     repeatUntilBeforeStart: "重复截止日期不能早于开始日期。",
-    repeatUntilMaxDaysError: "重复期限最多 365 天。",
+    repeatUntilMaxDaysError: "重复次数最多 30 次。",
     recurrenceCreateFallback: "重复任务已添加到本地，云端写入失败。",
     aboutUs: "关于我们",
     aboutSummary: "TaskEase 是一个现代化任务管理网页，帮助你更高效地安排每日工作。",
@@ -393,6 +373,10 @@ const TEXT = {
     all: "全部",
     active: "進行中",
     done: "已完成",
+    labelFilter: "標籤篩選",
+    labelFilterAll: "全部標籤",
+    labelFilterNoLabel: "無標籤",
+    labelFilterSelected: "已選標籤",
     noTask: "暫無任務",
     allDone: "🎉🎉🎉 所有任務均已完成！好好休息一下吧！🎉🎉🎉",
     edit: "編輯",
@@ -484,6 +468,17 @@ const TEXT = {
     planAlgorithmHint:
       "演算法步驟：\n1. 只納入「進行中」且預計時長、截止時間、優先級至少填寫過一項的任務。\n2. 依截止時間由早到晚排序；無截止時間排在後面；同一截止時間內依優先級數字由大到小。\n3. 若未填預計時長，依是否填寫截止、優先級推測所需工時。\n4. 依上述順序將任務依次裝入你輸入的可用時長，直至時間用完或沒有可裝任務。",
     profileSettings: "個人資料設定",
+    emailBoundLabel: "已綁定電子郵件",
+    dataStats: "數據統計",
+    dataStatsTitle: "數據統計",
+    allTimeStats: "累計統計",
+    weekStats: "最近一週",
+    completedTasks: "已完成任務",
+    totalHours: "任務時長",
+    estimatedHoursStat: "預估時長",
+    pomodoroHoursStat: "番茄鐘時長",
+    statsDescription: "累計已完成的任務統計。最近一週基於過去7天內完成的任務。",
+    recordedTime: "已計時",
     updateEmail: "變更電子郵件",
     updateUsername: "變更使用者名稱",
     resetPassword: "重設密碼",
@@ -502,8 +497,10 @@ const TEXT = {
     syncSuccess: "同步成功。",
     syncNeedLogin: "目前會話不可用，請重新登入後再同步。",
     syncFailed: "同步失敗",
+    autoSyncSuccessNotice: "自動同步成功。",
     syncBusyPrefix: "同步被占用，目前持有者",
     syncing: "同步中...",
+    editTaskSuccess: "編輯任務成功。",
     syncNow: "雲端同步",
     submitting: "提交中...",
     migrateLocalTitle: "偵測到本機資料",
@@ -528,10 +525,12 @@ const TEXT = {
     repeatWeekly: "每週",
     repeatMonthly: "每月",
     repeatUntilDate: "重複截止日期",
-    repeatUntilHint: "以天為單位，最長 365 天。",
+    repeatUntilHint: "最多重複 30 次（含目前任務）。",
+    repeatNextPreview: "下次生成時間",
+    repeatNextPreviewEmpty: "請先設定截止日期與重複規則。",
     repeatUntilRequired: "請設定重複截止日期。",
     repeatUntilBeforeStart: "重複截止日期不能早於開始日期。",
-    repeatUntilMaxDaysError: "重複期限最多 365 天。",
+    repeatUntilMaxDaysError: "重複次數最多 30 次。",
     recurrenceCreateFallback: "重複任務已新增到本機，雲端寫入失敗。",
     aboutUs: "關於我們",
     aboutSummary: "TaskEase 是一個現代化任務管理網頁，幫助你更有效率地安排每日工作。",
@@ -583,6 +582,10 @@ const TEXT = {
     all: "All",
     active: "Active",
     done: "Completed",
+    labelFilter: "Filter by Label",
+    labelFilterAll: "All Labels",
+    labelFilterNoLabel: "No Label",
+    labelFilterSelected: "Selected Labels",
     noTask: "No tasks",
     allDone: "🎉🎉🎉 All tasks are completed! Take a good break! 🎉🎉🎉",
     edit: "Edit",
@@ -675,6 +678,17 @@ const TEXT = {
     planAlgorithmHint:
       "How it works:\n1. Only active tasks that have at least one of: estimated hours, due time, or priority.\n2. Sort by earliest due time first; tasks without a due time go last; tie-break by higher priority number.\n3. If hours are missing, infer duration from due time and/or priority.\n4. Greedily pack tasks into your available time budget in that order until time runs out.",
     profileSettings: "Profile Settings",
+    emailBoundLabel: "Bound Email",
+    dataStats: "Data Statistics",
+    dataStatsTitle: "Data Statistics",
+    allTimeStats: "All Time",
+    weekStats: "This Week",
+    completedTasks: "Completed",
+    totalHours: "Total Hours",
+    estimatedHoursStat: "Estimated Hours",
+    pomodoroHoursStat: "Pomodoro Hours",
+    statsDescription: "Statistics on all completed tasks. This week counts tasks completed in the past 7 days.",
+    recordedTime: "Tracked",
     updateEmail: "Change Email",
     updateUsername: "Change Username",
     resetPassword: "Reset Password",
@@ -693,8 +707,10 @@ const TEXT = {
     syncSuccess: "Sync completed.",
     syncNeedLogin: "Session is invalid. Please sign in again before syncing.",
     syncFailed: "Sync failed",
+    autoSyncSuccessNotice: "Auto sync successful.",
     syncBusyPrefix: "Sync is locked by",
     syncing: "Syncing...",
+    editTaskSuccess: "Task edited successfully.",
     syncNow: "Cloud sync",
     submitting: "Submitting...",
     migrateLocalTitle: "Local Data Found",
@@ -719,10 +735,12 @@ const TEXT = {
     repeatWeekly: "Weekly",
     repeatMonthly: "Monthly",
     repeatUntilDate: "Repeat until",
-    repeatUntilHint: "Set by day, up to 365 days.",
+    repeatUntilHint: "Up to 30 occurrences (including current task).",
+    repeatNextPreview: "Next generated time",
+    repeatNextPreviewEmpty: "Set due date and repeat rule first.",
     repeatUntilRequired: "Please set a repeat end date.",
     repeatUntilBeforeStart: "Repeat end date cannot be earlier than start date.",
-    repeatUntilMaxDaysError: "Repeat duration can be at most 365 days.",
+    repeatUntilMaxDaysError: "Repeat occurrences can be at most 30.",
     recurrenceCreateFallback: "Recurring task added locally, cloud insert failed.",
     aboutUs: "About",
     aboutSummary: "TaskEase is a modern task management web app that helps you organize daily work efficiently.",
@@ -836,11 +854,13 @@ function readLocalTodos(key) {
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     return parsed.map((item) => {
-      const parsedRepeat = parseRemarkAndRepeat(item?.remark ?? "");
+      const parsedRepeat = parseLegacyRepeatFromRemark(item?.remark ?? "");
       return {
         ...item,
-        remark: parsedRepeat.remark,
+        remark: sanitizeRemark(item?.remark ?? ""),
         repeat_rule: normalizeRepeatRule(item?.repeat_rule ?? parsedRepeat.repeat_rule),
+        repeat_until_date: normalizeRepeatUntilDate(item?.repeat_until_date ?? parsedRepeat.repeat_until_date),
+        pomodoro_total_seconds: Math.max(0, Number(item?.pomodoro_total_seconds ?? 0)),
         progress_percent: snapProgress(item?.progress_percent),
         estimated_hours: Number(item?.estimated_hours ?? 0),
         priority: Number(item?.priority ?? 0),
@@ -962,6 +982,7 @@ function buildDueIso(dateValue, timeValue) {
 
 const REPEAT_MARKER_REGEX = /\[repeat:(none|daily|weekly|monthly)\]/gi;
 const REPEAT_UNTIL_MARKER_REGEX = /\[repeat-until:(\d{4}-\d{2}-\d{2})\]/gi;
+const LEGACY_POMODORO_MARKER_REGEX = /\[pomo:\d+\]/gi;
 
 function normalizeRepeatRule(rule) {
   const value = String(rule || "none").trim().toLowerCase();
@@ -981,44 +1002,28 @@ function normalizeRepeatUntilDate(dateValue) {
 function toDateKeyFromIso(value) {
   const d = new Date(value || "");
   if (Number.isNaN(d.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return normalizeDateKey(d.toISOString().slice(0, 10));
 }
 
-function parseRemarkAndRepeat(rawRemark) {
+function parseLegacyRepeatFromRemark(rawRemark) {
   const value = String(rawRemark || "");
   const repeatMatch = [...value.matchAll(REPEAT_MARKER_REGEX)].pop();
   const untilMatch = [...value.matchAll(REPEAT_UNTIL_MARKER_REGEX)].pop();
   const repeat_rule = normalizeRepeatRule(repeatMatch?.[1] || "none");
   const repeat_until_date = normalizeRepeatUntilDate(untilMatch?.[1] || "");
-  const remark = value.replace(REPEAT_MARKER_REGEX, "").replace(REPEAT_UNTIL_MARKER_REGEX, "").trim();
-  return { remark, repeat_rule, repeat_until_date };
+  return { repeat_rule, repeat_until_date };
 }
 
-function composeRemarkAndRepeat(rawRemark, repeatRule, repeatUntilDate = "") {
-  const repeat = normalizeRepeatRule(repeatRule);
-  const until = normalizeRepeatUntilDate(repeatUntilDate);
-  const plainRemark = String(rawRemark || "")
+function sanitizeRemark(rawRemark) {
+  return String(rawRemark || "")
     .replace(REPEAT_MARKER_REGEX, "")
     .replace(REPEAT_UNTIL_MARKER_REGEX, "")
+    .replace(LEGACY_POMODORO_MARKER_REGEX, "")
     .trim();
-  if (repeat === "none") return plainRemark;
-  if (until) return `${plainRemark} [repeat:${repeat}] [repeat-until:${until}]`.trim();
-  return `${plainRemark} [repeat:${repeat}]`.trim();
 }
 
 function getNextRecurringDdl(ddl, repeatRule) {
-  const rule = normalizeRepeatRule(repeatRule);
-  if (rule === "none" || !ddl) return null;
-  const base = new Date(ddl);
-  if (Number.isNaN(base.getTime())) return null;
-
-  const next = new Date(base);
-  if (rule === "daily") next.setDate(base.getDate() + 1);
-  else if (rule === "weekly") next.setDate(base.getDate() + 7);
-  else if (rule === "monthly") next.setMonth(base.getMonth() + 1);
-
-  return next.toISOString();
+  return getNextRecurringIso(ddl, normalizeRepeatRule(repeatRule));
 }
 
 function parseTaskLabels(raw) {
@@ -1040,16 +1045,19 @@ function parseTaskLabels(raw) {
 function mapTodo(row) {
   const rawStatus = String(row.status ?? STATUS_PENDING).trim();
   const status = rawStatus === STATUS_DELETED ? STATUS_DELETED : rawStatus;
-  const { remark, repeat_rule, repeat_until_date } = parseRemarkAndRepeat(row.remark ?? "");
+  const legacyRepeat = parseLegacyRepeatFromRemark(row.remark ?? "");
+  const repeat_rule = normalizeRepeatRule(row.repeat_rule ?? legacyRepeat.repeat_rule);
+  const repeat_until_date = normalizeRepeatUntilDate(row.repeat_until_date ?? legacyRepeat.repeat_until_date);
   return {
     id: row.id,
     title: row.title || "",
     status,
     estimated_hours: Number(row.estimated_hours ?? 0),
     ddl: row.ddl ?? null,
-    remark,
+    remark: sanitizeRemark(row.remark ?? ""),
     repeat_rule,
     repeat_until_date,
+    pomodoro_total_seconds: Math.max(0, Number(row.pomodoro_total_seconds ?? 0)),
     priority: Number(row.priority ?? 0),
     label: row.label ?? "",
     progress_percent: snapProgress(row.progress_percent ?? 0),
@@ -1139,6 +1147,7 @@ export default function App() {
   const [isPlanWorkModalOpen, setIsPlanWorkModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [isDataStatsModalOpen, setIsDataStatsModalOpen] = useState(false);
   const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1165,6 +1174,7 @@ export default function App() {
   const [notice, setNotice] = useState({ text: "", warning: false });
 
   const [filter, setFilter] = useState("all");
+  const [labelFilter, setLabelFilter] = useState("");
   const [viewMode, setViewMode] = useState("normal");
 
   const [draft, setDraft] = useState({
@@ -1190,11 +1200,20 @@ export default function App() {
   const autoSyncInFlightRef = useRef(false);
   const syncGuardRef = useRef({ owner: "", startedAt: 0, token: "" });
   const migrationPromptShownForUserRef = useRef(null);
+  const repeatColumnsSupportedRef = useRef(null);
+  const prefsReadyForAutoSaveRef = useRef(false);
   const ignoreAuthEventsUntilRef = useRef(0);
   const isLogoutInProgressRef = useRef(false);
 
   const [todos, setTodos] = useState([]);
   const [timerTaskId, setTimerTaskId] = useState(null);
+  const [timerSession, setTimerSession] = useState({
+    taskId: null,
+    totalSeconds: 0,
+    displaySeconds: 0,
+    isRunning: false,
+    startedAt: null,
+  });
   const currentTimerTask = timerTaskId ? todos.find((t) => t.id === timerTaskId) : null;
 
   const t = TEXT[lang];
@@ -1319,6 +1338,7 @@ export default function App() {
         setTodos(readAllLocalTodos());
         previousUserIdRef.current = null;
         autoSyncInFlightRef.current = false;
+        prefsReadyForAutoSaveRef.current = false;
         setIsMigratePromptOpen(false);
         migrationPromptShownForUserRef.current = null;
         return;
@@ -1332,6 +1352,7 @@ export default function App() {
       const switchedUser = previousUserIdRef.current !== current.id;
       if (switchedUser) {
         previousUserIdRef.current = current.id;
+        prefsReadyForAutoSaveRef.current = false;
       }
 
       // Show a fast local username first so UI does not appear blank when cloud is slow.
@@ -1340,8 +1361,8 @@ export default function App() {
       pushDiag("authSync", "username_fast_resolved", { seq, userId: current.id, fastName });
 
       // Avoid repeating heavy profile/todo fetches on token refresh for same user.
-      if (!switchedUser && event === "TOKEN_REFRESHED") {
-        pushDiag("authSync", "skip_token_refreshed", { event, seq, userId: current.id });
+      if (!switchedUser && (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")) {
+        pushDiag("authSync", "skip_repeat_auth_event", { event, seq, userId: current.id });
         return;
       }
 
@@ -1376,6 +1397,7 @@ export default function App() {
           "warn",
         );
       }
+      prefsReadyForAutoSaveRef.current = true;
 
       if (!mounted || seq !== authSyncSeqRef.current) return;
 
@@ -1451,14 +1473,34 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [supabase, user, autoSyncEnabled, lang, clockFormat, themeMode, taskLabels]);
 
+  useEffect(() => {
+    if (!supabase || !user?.id) return;
+    if (!prefsReadyForAutoSaveRef.current) return;
+    const timer = window.setTimeout(() => {
+      void savePreferences(user.id, {
+        language: lang,
+        clock_format: clockFormat,
+        theme_mode: themeMode,
+        task_labels: taskLabels,
+        auto_sync_enabled: autoSyncEnabled,
+        theme_preset: themePreset,
+        custom_background: customBackground,
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [supabase, user?.id, lang, clockFormat, themeMode, taskLabels, autoSyncEnabled, themePreset, customBackground]);
+
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
       if (todo.status === STATUS_DELETED) return false;
-      if (filter === "active") return todo.status !== STATUS_DONE;
-      if (filter === "done") return todo.status === STATUS_DONE;
+      if (filter === "active" && todo.status === STATUS_DONE) return false;
+      if (filter === "done" && todo.status !== STATUS_DONE) return false;
+      const taskLabel = String(todo.label || "").trim();
+      if (labelFilter === LABEL_FILTER_UNLABELED && taskLabel) return false;
+      if (labelFilter && labelFilter !== LABEL_FILTER_UNLABELED && taskLabel !== labelFilter) return false;
       return true;
     });
-  }, [todos, filter]);
+  }, [todos, filter, labelFilter]);
 
   const pendingTodos = useMemo(
     () => todos.filter((item) => item.status !== STATUS_DONE && item.status !== STATUS_DELETED),
@@ -1479,6 +1521,13 @@ export default function App() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, lang));
   }, [todos, taskLabels, lang]);
 
+  useEffect(() => {
+    if (!labelFilter || labelFilter === LABEL_FILTER_UNLABELED) return;
+    if (!mergedTaskLabels.includes(labelFilter)) {
+      setLabelFilter("");
+    }
+  }, [labelFilter, mergedTaskLabels]);
+
   const clock = getClockParts(now, lang, clockFormat);
 
   async function loadTodosForUser(userId, options = {}) {
@@ -1488,9 +1537,15 @@ export default function App() {
     const localUserTodos = readLocalTodos(`taskease_todos_${userId}`);
     const guestTodos = readLocalTodos(GUEST_KEY);
 
+    const selectWithRepeat = "id,title,status,estimated_hours,ddl,remark,repeat_rule,repeat_until_date,priority,label,progress_percent,pomodoro_total_seconds,created_at,user_id";
+    const selectLegacy = "id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,pomodoro_total_seconds,created_at,user_id";
+
+    const shouldUseRepeatColumns = repeatColumnsSupportedRef.current !== false;
+    const primarySelect = shouldUseRepeatColumns ? selectWithRepeat : selectLegacy;
+
     let result = await supabase
       .from(TODO_TABLE)
-      .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
+      .select(primarySelect)
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -1500,9 +1555,20 @@ export default function App() {
       await sleep(250);
       result = await supabase
         .from(TODO_TABLE)
-        .select("id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id")
+        .select(primarySelect)
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
+    }
+
+    if (result.error && shouldUseRepeatColumns && String(result.error.message || "").toLowerCase().includes("repeat_rule")) {
+      repeatColumnsSupportedRef.current = false;
+      result = await supabase
+        .from(TODO_TABLE)
+        .select(selectLegacy)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+    } else if (!result.error && shouldUseRepeatColumns) {
+      repeatColumnsSupportedRef.current = true;
     }
 
     const { data, error } = result;
@@ -1778,13 +1844,14 @@ export default function App() {
           notify(t.repeatUntilBeforeStart, true);
           return;
         }
-        if (dayDiff > 365) {
+        const occurrences = countOccurrencesByRule(startDateKey, repeat_until_date, repeat_rule);
+        if (occurrences > 30) {
           notify(t.repeatUntilMaxDaysError, true);
           return;
         }
       }
 
-      const remark = composeRemarkAndRepeat(sourceDraft.remark, repeat_rule, repeat_until_date) || null;
+      const remark = sanitizeRemark(sourceDraft.remark) || null;
 
       if (!editingTodoId && !skipDuplicateCheck && isDuplicateTodo(title, ddl)) {
         setPendingDuplicatePayload(sourceDraft);
@@ -1797,6 +1864,7 @@ export default function App() {
         const patch = { title, estimated_hours, ddl, remark, repeat_rule, repeat_until_date, priority, label };
         await updateTodo(editingTodoId, patch);
         pushDiag("taskSubmit", "edit_success", { todoId: editingTodoId });
+        notify(t.editTaskSuccess, false);
         closeAddModal();
         return;
       }
@@ -1808,9 +1876,12 @@ export default function App() {
         estimated_hours,
         ddl,
         remark,
+        repeat_rule,
+        repeat_until_date,
         priority,
         label,
         progress_percent: 0,
+        pomodoro_total_seconds: 0,
         created_at: new Date().toISOString(),
         local_dirty: true,
         local_updated_at: new Date().toISOString(),
@@ -1871,17 +1942,24 @@ export default function App() {
 
     if (hasRepeatPatch || hasRepeatUntilPatch || hasRemarkPatch) {
       const rawRemark = hasRemarkPatch ? nextPatch.remark : targetBefore.remark;
-      nextPatch.remark = composeRemarkAndRepeat(rawRemark, effectiveRepeat, effectiveRepeatUntil) || null;
+      nextPatch.remark = sanitizeRemark(rawRemark) || null;
       nextPatch.repeat_rule = effectiveRepeat;
       nextPatch.repeat_until_date = effectiveRepeatUntil;
     }
 
+    if (Object.prototype.hasOwnProperty.call(nextPatch, "pomodoro_total_seconds")) {
+      nextPatch.pomodoro_total_seconds = Math.max(0, Number(nextPatch.pomodoro_total_seconds || 0));
+    }
+
     const uiPatch = { ...nextPatch };
     if (hasRepeatPatch || hasRepeatUntilPatch || hasRemarkPatch) {
-      const parsed = parseRemarkAndRepeat(uiPatch.remark ?? targetBefore.remark);
-      uiPatch.remark = parsed.remark;
-      uiPatch.repeat_rule = normalizeRepeatRule(uiPatch.repeat_rule ?? parsed.repeat_rule);
-      uiPatch.repeat_until_date = normalizeRepeatUntilDate(uiPatch.repeat_until_date ?? parsed.repeat_until_date);
+      uiPatch.remark = sanitizeRemark(uiPatch.remark ?? targetBefore.remark);
+      uiPatch.repeat_rule = normalizeRepeatRule(uiPatch.repeat_rule ?? targetBefore.repeat_rule);
+      uiPatch.repeat_until_date = normalizeRepeatUntilDate(uiPatch.repeat_until_date ?? targetBefore.repeat_until_date);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(uiPatch, "pomodoro_total_seconds")) {
+      uiPatch.pomodoro_total_seconds = Math.max(0, Number(uiPatch.pomodoro_total_seconds || 0));
     }
 
     const localUpdateTs = new Date().toISOString();
@@ -1917,10 +1995,13 @@ export default function App() {
         status: STATUS_PENDING,
         estimated_hours: Number(baseTodo.estimated_hours || 0),
         ddl: nextRecurringDdl,
-        remark: composeRemarkAndRepeat(baseTodo.remark, repeatRule, repeatUntilDate) || null,
+        remark: sanitizeRemark(baseTodo.remark) || null,
+        repeat_rule: repeatRule,
+        repeat_until_date: repeatUntilDate,
         priority: Number(baseTodo.priority || 0),
         label: baseTodo.label || null,
         progress_percent: 0,
+        pomodoro_total_seconds: 0,
         created_at: new Date().toISOString(),
         user_id: user?.id || null,
         local_dirty: true,
@@ -2192,14 +2273,58 @@ export default function App() {
 
   function handleStartTimer(taskId) {
     setTimerTaskId(taskId);
+    const task = todos.find((item) => item.id === taskId);
+    const baseSeconds = Math.max(0, Number(task?.pomodoro_total_seconds || 0));
+    setTimerSession({
+      taskId,
+      totalSeconds: baseSeconds,
+      displaySeconds: baseSeconds,
+      isRunning: false,
+      startedAt: null,
+    });
   }
 
-  function handleStopTimer() {
-    // Stop only resets timer state in the widget; does not close it.
+  function handleTimerSessionChange(nextSession) {
+    setTimerSession((prev) => ({
+      ...prev,
+      ...nextSession,
+    }));
+  }
+
+  async function handleTimerSessionPersist(nextSession) {
+    if (!nextSession?.taskId) return;
+    setTimerSession((prev) => ({
+      ...prev,
+      ...nextSession,
+    }));
+    await persistPomodoroSession(nextSession.taskId, nextSession.totalSeconds);
+  }
+
+  async function persistPomodoroSession(taskId, totalSeconds) {
+    const targetTask = todos.find((item) => item.id === taskId);
+    if (!targetTask) return;
+
+    const estimatedHours = Number(targetTask.estimated_hours || 0);
+    const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
+    const progressFromTimer = estimatedSeconds > 0 ? Math.min(100, (Number(totalSeconds || 0) / estimatedSeconds) * 100) : snapProgress(targetTask.progress_percent);
+    await updateTodo(taskId, {
+      pomodoro_total_seconds: Math.max(0, Math.floor(Number(totalSeconds || 0))),
+      progress_percent: Math.max(snapProgress(targetTask.progress_percent), snapProgress(progressFromTimer)),
+    });
+  }
+
+  async function handleStopTimer(nextSession = timerSession) {
+    if (!nextSession?.taskId) {
+      setTimerTaskId(null);
+      setTimerSession({ taskId: null, totalSeconds: 0, displaySeconds: 0, isRunning: false, startedAt: null });
+      return;
+    }
+    setTimerTaskId(null);
+    setTimerSession({ taskId: null, totalSeconds: 0, displaySeconds: 0, isRunning: false, startedAt: null });
   }
 
   function handleCloseTimer() {
-    setTimerTaskId(null);
+    void handleStopTimer(timerSession);
   }
 
   async function handleLogout() {
@@ -2229,26 +2354,6 @@ export default function App() {
     setIsMigratePromptOpen(false);
     notify('已退出登录', false);
     pushDiag("auth", "logout_local_cleared", {});
-    return true;
-  }
-
-  async function handleUpdateEmail(nextEmail) {
-    if (!supabase || !user) {
-      notify(t.actionNeedLogin, true);
-      return false;
-    }
-    const email = String(nextEmail || "").trim().toLowerCase();
-    if (!isValidEmail(email)) {
-      notify(t.invalidEmail, true);
-      return false;
-    }
-
-    const { error } = await supabase.auth.updateUser({ email });
-    if (error) {
-      notify(`${t.registerFailed}: ${error.message}`, true);
-      return false;
-    }
-    notify(t.updateEmailSuccess, false);
     return true;
   }
 
@@ -2437,20 +2542,39 @@ export default function App() {
           status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
           estimated_hours: Number(x.estimated_hours ?? 0),
           ddl: x.ddl || null,
-          remark: composeRemarkAndRepeat(x.remark, x.repeat_rule, x.repeat_until_date) || null,
+          remark: sanitizeRemark(x.remark) || null,
+          repeat_rule: normalizeRepeatRule(x.repeat_rule),
+          repeat_until_date: normalizeRepeatUntilDate(x.repeat_until_date) || null,
           priority: Number(x.priority ?? 0),
           label: x.label || null,
           progress_percent: snapProgress(x.progress_percent ?? 0),
+          pomodoro_total_seconds: Math.max(0, Number(x.pomodoro_total_seconds ?? 0)),
           created_at: x.created_at || new Date().toISOString(),
           user_id: user.id,
         }));
 
-        const upsertResult = await withLockRetry(
+        const toLegacyRows = () => rows.map(({ repeat_rule, repeat_until_date, ...rest }) => rest);
+        const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
+
+        let upsertResult = await withLockRetry(
           () => withTimeout(
-            supabase.from(TODO_TABLE).upsert(rows, { onConflict: "id" }),
+            supabase.from(TODO_TABLE).upsert(shouldSendRepeatFields ? rows : toLegacyRows(), { onConflict: "id" }),
             OP_TIMEOUT_MS,
           ),
         );
+
+        if (upsertResult?.error && shouldSendRepeatFields && String(upsertResult.error.message || "").toLowerCase().includes("repeat_rule")) {
+          repeatColumnsSupportedRef.current = false;
+          upsertResult = await withLockRetry(
+            () => withTimeout(
+              supabase.from(TODO_TABLE).upsert(toLegacyRows(), { onConflict: "id" }),
+              OP_TIMEOUT_MS,
+            ),
+          );
+        } else if (!upsertResult?.error && shouldSendRepeatFields) {
+          repeatColumnsSupportedRef.current = true;
+        }
+
         if (upsertResult?.error) {
           throw new Error(upsertResult.error.message || "Failed to upsert local changes to cloud");
         }
@@ -2484,6 +2608,7 @@ export default function App() {
 
       pushDiag("sync", "success", { source, count: mergedTodos.length });
       if (source === "manual") notify(t.syncSuccess, false);
+      if (source === "auto") notify(t.autoSyncSuccessNotice, false);
       return true;
     } catch (error) {
       const isTimeout = String(error?.message || "") === "TIMEOUT";
@@ -2533,18 +2658,35 @@ export default function App() {
           status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
           estimated_hours: Number(x.estimated_hours ?? 0),
           ddl: x.ddl || null,
-          remark: composeRemarkAndRepeat(x.remark, x.repeat_rule) || null,
+          remark: sanitizeRemark(x.remark) || null,
+          repeat_rule: normalizeRepeatRule(x.repeat_rule),
+          repeat_until_date: normalizeRepeatUntilDate(x.repeat_until_date) || null,
           priority: Number(x.priority ?? 0),
           label: x.label || null,
           progress_percent: snapProgress(x.progress_percent ?? 0),
+          pomodoro_total_seconds: Math.max(0, Number(x.pomodoro_total_seconds ?? 0)),
           created_at: x.created_at || new Date().toISOString(),
           user_id: user.id,
         }));
 
-        const { error } = await withTimeout(
-          supabase.from(TODO_TABLE).upsert(rows, { onConflict: "id" }),
+        const toLegacyRows = () => rows.map(({ repeat_rule, repeat_until_date, ...rest }) => rest);
+        const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
+
+        let { error } = await withTimeout(
+          supabase.from(TODO_TABLE).upsert(shouldSendRepeatFields ? rows : toLegacyRows(), { onConflict: "id" }),
           OP_TIMEOUT_MS,
         );
+
+        if (error && shouldSendRepeatFields && String(error.message || "").toLowerCase().includes("repeat_rule")) {
+          repeatColumnsSupportedRef.current = false;
+          ({ error } = await withTimeout(
+            supabase.from(TODO_TABLE).upsert(toLegacyRows(), { onConflict: "id" }),
+            OP_TIMEOUT_MS,
+          ));
+        } else if (!error && shouldSendRepeatFields) {
+          repeatColumnsSupportedRef.current = true;
+        }
+
         if (error) throw error;
       }
 
@@ -2633,6 +2775,7 @@ export default function App() {
             onLogout={handleLogout}
             onOpenProfileSettings={() => setIsProfileModalOpen(true)}
             onOpenAbout={() => setIsAboutModalOpen(true)}
+            onOpenDataStats={() => setIsDataStatsModalOpen(true)}
             onManualSync={handleManualSync}
             isSyncing={isSyncing}
             autoSyncEnabled={autoSyncEnabled}
@@ -2650,6 +2793,10 @@ export default function App() {
           estimateHours={estimateHours}
           filter={filter}
           setFilter={setFilter}
+          labelFilter={labelFilter}
+          setLabelFilter={setLabelFilter}
+          unlabeledFilterValue={LABEL_FILTER_UNLABELED}
+          labelOptions={mergedTaskLabels}
           viewMode={viewMode}
           setViewMode={setViewMode}
           visibleTodos={visibleTodos}
@@ -2664,6 +2811,7 @@ export default function App() {
           onEditTodo={openEditTodo}
           snapProgress={snapProgress}
           onStartTimer={handleStartTimer}
+          timerSession={timerSession}
         />
 
         <AuthModal
@@ -2780,9 +2928,8 @@ export default function App() {
           t={t}
           pageBg={pageBg}
           themeColors={themeColors}
-          username={username}
           email={user?.email || ""}
-          onUpdateEmail={handleUpdateEmail}
+          username={username}
           onUpdateUsername={handleUpdateUsername}
           onResetPassword={handleResetPassword}
         />
@@ -2793,6 +2940,16 @@ export default function App() {
           t={t}
           pageBg={pageBg}
           repoUrl={PROJECT_REPO_URL}
+        />
+
+        <DataStatsModal
+          isOpen={isDataStatsModalOpen}
+          onClose={() => setIsDataStatsModalOpen(false)}
+          t={t}
+          pageBg={pageBg}
+          themeColors={themeColors}
+          todos={todos}
+          STATUS_DONE={STATUS_DONE}
         />
 
         <OtpModal
@@ -2811,6 +2968,8 @@ export default function App() {
         <PomodoroTimer
           isActive={timerTaskId !== null}
           taskData={currentTimerTask}
+          onSessionChange={handleTimerSessionChange}
+          onPersistSession={handleTimerSessionPersist}
           onStop={handleStopTimer}
           onClose={handleCloseTimer}
         />

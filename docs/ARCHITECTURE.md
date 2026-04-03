@@ -2,6 +2,17 @@
 
 This document describes the overall architecture, code organization, design patterns, and data flows in TaskEase.
 
+## Database Change Policy (For All AI Contributors)
+
+- Database schema changes are allowed and expected when data becomes structured and long-lived.
+- Do not store structured business data in `remark` or other text fields as hidden markers if a proper column should exist.
+- If a feature needs durable fields, create a SQL migration in `supabase/` and update app read/write paths accordingly.
+- Temporary compatibility parsing is acceptable only during migration windows, and must be removed after schema rollout.
+
+Current explicit decision by project owner:
+- It is always acceptable to modify database schema for correct design.
+- "Cannot change schema" is not a valid reason for workaround implementations.
+
 ## Table of Contents
 1. [High-Level Architecture](#high-level-architecture)
 2. [Component Structure](#component-structure)
@@ -555,6 +566,13 @@ CREATE TABLE public.todos (
   priority SMALLINT DEFAULT 0 CHECK (priority >= 0 AND priority <= 10),
   label TEXT,
   remark TEXT,
+  repeat_rule TEXT NOT NULL DEFAULT 'none'
+    CHECK (repeat_rule IN ('none', 'daily', 'weekly', 'monthly')),
+  repeat_until_date DATE,
+  progress_percent SMALLINT NOT NULL DEFAULT 0
+    CHECK (progress_percent >= 0 AND progress_percent <= 100 AND MOD(progress_percent, 10) = 0),
+  pomodoro_total_seconds INTEGER NOT NULL DEFAULT 0
+    CHECK (pomodoro_total_seconds >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   

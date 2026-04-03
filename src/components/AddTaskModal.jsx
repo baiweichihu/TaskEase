@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { InputModal } from "./InputModal";
+import { ModalShell } from "./ModalShell";
+import { getMaxRepeatUntilDate, getNextRecurringIso, normalizeDateKey } from "../utils/recurrence";
 
 export function AddTaskModal({
   isOpen,
@@ -31,8 +33,6 @@ export function AddTaskModal({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const customInputStyle = {
     backgroundColor: themeColors.listBg,
     borderColor: themeColors.softBtnBorder,
@@ -61,27 +61,16 @@ export function AddTaskModal({
     setNewTagDraft("");
   }
 
-  function normalizeDate(value) {
-    const v = String(value || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return "";
-    const d = new Date(`${v}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return "";
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }
-
-  function addDays(dateKey, days) {
-    const base = normalizeDate(dateKey);
-    if (!base) return "";
-    const d = new Date(`${base}T00:00:00`);
-    d.setDate(d.getDate() + days);
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }
-
-  const todayKey = normalizeDate(new Date().toISOString().slice(0, 10));
-  const repeatStartDate = normalizeDate(draft.ddlDate) || todayKey;
-  const repeatUntilMaxDate = addDays(repeatStartDate, 365);
+  const todayKey = normalizeDateKey(new Date().toISOString().slice(0, 10));
+  const repeatStartDate = normalizeDateKey(draft.ddlDate) || todayKey;
+  const repeatUntilMaxDate = getMaxRepeatUntilDate(repeatStartDate, draft.repeat_rule, 30);
+  const repeatPreviewIso = getNextRecurringIso(
+    draft.ddlDate ? `${draft.ddlDate}T${String(draft.ddlTime || "23:59")}` : null,
+    draft.repeat_rule,
+  );
+  const repeatPreviewLabel = repeatPreviewIso
+    ? new Date(repeatPreviewIso).toLocaleString()
+    : t.repeatNextPreviewEmpty;
 
   const labelColStyle = { minWidth: "7.5rem", fontWeight: 600 };
 
@@ -104,51 +93,13 @@ export function AddTaskModal({
         pageBg={pageBg}
       />
 
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1040,
-          animation: "fadeIn 0.3s ease-in-out",
-        }}
-      />
-      <div
-        className="modal d-block"
-        tabIndex="-1"
-        style={{
-          animation: "slideDown 0.4s ease-out",
-          zIndex: 1050,
-        }}
-      >
-        <style>{`
-          @keyframes slideDown {
-            from {
-              transform: translateY(-50px);
-              opacity: 0;
-            }
-            to {
-              transform: translateY(0);
-              opacity: 1;
-            }
-          }
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-        `}</style>
+      <ModalShell isOpen={isOpen} onClose={onClose}>
+        {(requestClose) => (
         <div className="modal-dialog modal-lg" style={{ marginTop: "60px" }}>
-          <div className="modal-content" style={{ backgroundColor: pageBg }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title fs-6">{isEditing ? t.editTask : t.addTask}</h2>
-              <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
+                 <button type="button" className="btn-close" aria-label={t.close} onClick={requestClose} />
             </div>
             <div className="modal-body">
               <form
@@ -328,6 +279,9 @@ export function AddTaskModal({
                     <div className="small text-muted w-100" style={{ marginLeft: "calc(7.5rem + 0.5rem)" }}>
                       {t.repeatUntilHint}
                     </div>
+                    <div className="small text-muted w-100" style={{ marginLeft: "calc(7.5rem + 0.5rem)" }}>
+                      {t.repeatNextPreview}：{repeatPreviewLabel}
+                    </div>
                   </div>
                 ) : null}
 
@@ -380,7 +334,7 @@ export function AddTaskModal({
                       {t.deleteTask}
                     </button>
                   ) : null}
-                  <button className="btn btn-outline-secondary" type="button" onClick={onClose}>
+                  <button className="btn btn-outline-secondary" type="button" onClick={requestClose}>
                     {t.cancel}
                   </button>
                   <button
@@ -397,7 +351,8 @@ export function AddTaskModal({
             </div>
           </div>
         </div>
-      </div>
+      )}
+      </ModalShell>
     </>
   );
 }

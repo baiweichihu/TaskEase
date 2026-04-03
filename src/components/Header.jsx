@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { CustomBackgroundModal } from "./CustomBackgroundModal";
+import { ModalShell } from "./ModalShell";
 
 export function Header({
   t,
@@ -21,6 +22,7 @@ export function Header({
   onLogout,
   onOpenProfileSettings,
   onOpenAbout,
+  onOpenDataStats,
   onManualSync,
   isSyncing,
   autoSyncEnabled,
@@ -30,21 +32,10 @@ export function Header({
   resolvedTheme,
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSettingsClosing, setIsSettingsClosing] = useState(false);
   const [isCustomBgModalOpen, setIsCustomBgModalOpen] = useState(false);
   const [isLogoutLoading, setIsLogoutLoading] = useState(false);
   const [isManualSyncLoading, setIsManualSyncLoading] = useState(false);
-  const closeTimerRef = useRef(null);
   const labelTextColor = resolvedTheme === "dark" || isCustomBgTheme ? "#f8f9fa" : "#212529";
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) {
-        window.clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-    };
-  }, []);
 
   const softButtonStyle = {
     backgroundColor: themeColors.softBtn,
@@ -72,22 +63,11 @@ export function Header({
   };
 
   function openSettings() {
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    setIsSettingsClosing(false);
     setIsSettingsOpen(true);
   }
 
   function closeSettings() {
-    setIsSettingsClosing(true);
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = window.setTimeout(() => {
-      setIsSettingsOpen(false);
-      setIsSettingsClosing(false);
-      closeTimerRef.current = null;
-    }, 240);
+    setIsSettingsOpen(false);
   }
 
   return (
@@ -112,28 +92,13 @@ export function Header({
           >
             <span>{user ? username : t.account + " & " + t.settings}</span>
           </button>
-          {isSettingsOpen ? (
-            <>
-            <div
-              className={isSettingsClosing ? "taskease-modal-backdrop-exit" : ""}
-              style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                backgroundColor: "rgba(0, 0, 0, 0.5)",
-                zIndex: 1040,
-                animation: isSettingsClosing ? "fadeOut 0.24s ease-in forwards" : "fadeIn 0.3s ease-in-out",
-              }}
-              onClick={closeSettings}
-            />
-            <div className={`modal d-block ${isSettingsClosing ? "taskease-modal-exit" : "taskease-modal-enter"}`} tabIndex="-1" style={{ zIndex: 1050 }}>
+          <ModalShell isOpen={isSettingsOpen} onClose={closeSettings} closeOnBackdrop>
+            {(requestClose) => (
               <div className="modal-dialog" style={{ marginTop: "60px" }}>
-                <div className="modal-content" style={{ backgroundColor: pageBg }}>
+                <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
                   <div className="modal-header">
                     <h2 className="modal-title fs-6">{t.settings}</h2>
-                    <button type="button" className="btn-close" onClick={closeSettings} />
+                    <button type="button" className="btn-close" onClick={requestClose} />
                   </div>
                   <div className="modal-body">
               <div className="d-grid gap-3">
@@ -301,6 +266,12 @@ export function Header({
                     }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
                       {t.profileSettings}
                     </button>
+                    <button className="btn btn-sm" type="button" onClick={() => {
+                      onOpenDataStats();
+                      closeSettings();
+                    }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
+                      {t.dataStats}
+                    </button>
                     <button
                       className="btn btn-sm"
                       type="button"
@@ -379,9 +350,8 @@ export function Header({
                   </div>
                 </div>
               </div>
-            </div>
-            </>
-          ) : null}
+            )}
+          </ModalShell>
         </div>
       </div>
 

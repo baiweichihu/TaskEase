@@ -2,6 +2,8 @@
  * Small overlay modal with a single text input (OTP-style layout).
  * Reusable for one-line prompts (e.g. new tag name).
  */
+import { ModalShell } from "./ModalShell";
+
 export function InputModal({
   isOpen,
   onClose,
@@ -16,8 +18,6 @@ export function InputModal({
   pageBg,
   inputStyle,
 }) {
-  if (!isOpen) return null;
-
   const baseInputStyle = {
     backgroundColor: "#faefdf",
     borderColor: "#e9bd34",
@@ -31,28 +31,17 @@ export function InputModal({
   }
 
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.45)",
-          zIndex: 1060,
-          animation: "fadeIn 0.25s ease-in-out",
-        }}
-        onClick={onClose}
-      />
-      <div
-        className="modal d-block"
-        tabIndex="-1"
-        style={{ zIndex: 1061 }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="input-modal-title"
-      >
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      backdropZIndex={1060}
+      modalZIndex={1061}
+      closeOnBackdrop
+      role="dialog"
+      ariaModal="true"
+      ariaLabelledby="input-modal-title"
+    >
+      {(requestClose) => (
         <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: "400px" }}>
           <div
             className="modal-content shadow"
@@ -63,7 +52,7 @@ export function InputModal({
               <h2 id="input-modal-title" className="modal-title fs-6 mb-0">
                 {title}
               </h2>
-              <button type="button" className="btn-close" aria-label={closeAriaLabel} onClick={onClose} />
+              <button type="button" className="btn-close" aria-label={closeAriaLabel} onClick={requestClose} />
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body pt-0">
@@ -79,7 +68,7 @@ export function InputModal({
                 />
               </div>
               <div className="modal-footer py-2 gap-2 flex-wrap">
-                <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
+                <button type="button" className="btn btn-outline-secondary" onClick={requestClose}>
                   {cancelLabel}
                 </button>
                 <button type="submit" className="btn btn-warning text-dark">
@@ -89,7 +78,7 @@ export function InputModal({
             </form>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }

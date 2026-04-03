@@ -1,6 +1,8 @@
 /**
  * Custom confirm dialog (no window.confirm).
  */
+import { ModalShell } from "./ModalShell";
+
 export function ConfirmModal({
   isOpen,
   onClose,
@@ -13,31 +15,18 @@ export function ConfirmModal({
   pageBg,
   danger,
 }) {
-  if (!isOpen) return null;
-
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.45)",
-          zIndex: 1070,
-          animation: "fadeIn 0.25s ease-in-out",
-        }}
-        onClick={onClose}
-      />
-      <div
-        className="modal d-block"
-        tabIndex="-1"
-        style={{ zIndex: 1071 }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-modal-title"
-      >
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      backdropZIndex={1070}
+      modalZIndex={1071}
+      closeOnBackdrop
+      role="dialog"
+      ariaModal="true"
+      ariaLabelledby="confirm-modal-title"
+    >
+      {(requestClose) => (
         <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: "420px" }}>
           <div
             className="modal-content shadow"
@@ -48,7 +37,7 @@ export function ConfirmModal({
               <h2 id="confirm-modal-title" className="modal-title fs-6 mb-0">
                 {title}
               </h2>
-              <button type="button" className="btn-close" aria-label={closeAriaLabel} onClick={onClose} />
+              <button type="button" className="btn-close" aria-label={closeAriaLabel} onClick={requestClose} />
             </div>
             <div className="modal-body py-3">
               <p className="mb-0 small" style={{ whiteSpace: "pre-wrap" }}>
@@ -56,7 +45,7 @@ export function ConfirmModal({
               </p>
             </div>
             <div className="modal-footer py-2 gap-2 flex-wrap justify-content-end">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
+              <button type="button" className="btn btn-outline-secondary" onClick={requestClose}>
                 {cancelLabel}
               </button>
               <button
@@ -69,7 +58,7 @@ export function ConfirmModal({
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }
