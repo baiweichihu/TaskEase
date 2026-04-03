@@ -144,7 +144,7 @@ TaskEase/
 
 ### 📄 许可证
 
-MIT License
+暂未指定开源许可证（All rights reserved）
 
 ---
 
@@ -292,4 +292,4 @@ Issues and pull requests are welcome!
 
 ### 📄 License
 
-MIT License
+No open-source license specified yet (All rights reserved)
