@@ -22,8 +22,15 @@ export function TaskManager({
   onEditTodo,
   snapProgress,
   onStartTimer,
+  timerSession,
+  labelFilter,
+  setLabelFilter,
+  unlabeledFilterValue,
+  labelOptions,
 }) {
   const locale = lang === "en" ? "en-US" : lang;
+  const activeTimerTaskId = timerSession?.taskId || null;
+  const activeTimerDisplaySeconds = Math.max(0, Number(timerSession?.displaySeconds || 0));
 
   function yellowButtonStyle(active) {
     return {
@@ -38,6 +45,12 @@ export function TaskManager({
     color: "#2b2b2b",
     borderColor: themeColors.softBtnBorder,
     fontWeight: 600,
+  };
+
+  const themedSelectStyle = {
+    backgroundColor: themeColors.listBg,
+    borderColor: themeColors.softBtnBorder,
+    color: "#2b2b2b",
   };
 
   function priorityNote(priority) {
@@ -110,6 +123,27 @@ export function TaskManager({
     if (!base || diff === null) return base;
     const label = diff >= 0 ? `${diff}天` : `-${Math.abs(diff)}天`;
     return `${base} (${label})`;
+  }
+
+  function formatTrackedDuration(totalSeconds) {
+    const value = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+    const hours = Math.floor(value / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
+    const seconds = value % 60;
+
+    if (lang === "en") {
+      const parts = [];
+      if (hours > 0) parts.push(`${hours}h`);
+      if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
+      if (hours === 0 && minutes === 0) parts.push(`${seconds}s`);
+      return parts.join(" ");
+    }
+
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}${lang === "zh-TW" ? "小時" : "小时"}`);
+    if (minutes > 0 || hours > 0) parts.push(`${minutes}${lang === "zh-TW" ? "分鐘" : "分"}`);
+    if (hours === 0 && minutes === 0) parts.push(`${seconds}${lang === "zh-TW" ? "秒" : "秒"}`);
+    return parts.join(" ");
   }
 
   const [calendarCursor, setCalendarCursor] = useState(() => {
@@ -199,6 +233,18 @@ export function TaskManager({
     }
 
     if (nextStatus === STATUS_PENDING && filter === "done") {
+      setTaskAnim(todo.id, "te-task-fade-out", 220);
+      const timerId = window.setTimeout(() => {
+        void updateTodo(todo.id, {
+          status: STATUS_PENDING,
+          progress_percent: snapProgress(todo.progress_percent) >= 100 ? 90 : snapProgress(todo.progress_percent),
+        });
+      }, 170);
+      taskAnimTimersRef.current.push(timerId);
+      return;
+    }
+
+    if (nextStatus === STATUS_PENDING && filter === "all") {
       setTaskAnim(todo.id, "te-task-fade-out", 220);
       const timerId = window.setTimeout(() => {
         void updateTodo(todo.id, {
@@ -324,6 +370,14 @@ export function TaskManager({
 
   function renderTaskItem(todo, idx) {
     const rowAnimClass = taskAnimMap[String(todo.id)] || "";
+    const baseRecordedSeconds = Math.max(0, Number(todo.pomodoro_total_seconds || 0));
+    const recordedSeconds = activeTimerTaskId === todo.id ? activeTimerDisplaySeconds : baseRecordedSeconds;
+    const estimatedHours = Number(todo.estimated_hours || 0);
+    const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
+    const timerProgressPercent = estimatedSeconds > 0 ? Math.min(100, (recordedSeconds / estimatedSeconds) * 100) : snapProgress(todo.progress_percent);
+    const effectiveProgress = Math.max(snapProgress(todo.progress_percent), snapProgress(timerProgressPercent));
+    const remainingHours = estimatedHours > 0 ? Math.max(0, estimatedHours - recordedSeconds / 3600) : null;
+    const recordedLabel = recordedSeconds > 0 ? `${t.recordedTime || "已计时"}: ${formatTrackedDuration(recordedSeconds)}` : null;
     return (
       <li key={todo.id} className={`list-group-item border-0 border-bottom te-task-row ${rowAnimClass}`} style={{ backgroundColor: listBg }}>
         <div className="d-flex gap-2 align-items-start flex-wrap flex-sm-nowrap">
@@ -345,14 +399,11 @@ export function TaskManager({
             </div>
             <div className="small text-muted mt-2 d-flex flex-wrap gap-0 align-items-baseline">
               {[
-                Number(todo.estimated_hours || 0) > 0
-                  ? `${t.estHours}: ${Number(todo.estimated_hours || 0).toFixed(1)} ${t.hourUnit}`
+                estimatedHours > 0
+                  ? `${t.estHours}: ${estimatedHours.toFixed(1)} ${t.hourUnit}`
                   : null,
-                Number(todo.estimated_hours || 0) > 0
-                  ? `${t.remHours}: ${(
-                    (Number(todo.estimated_hours || 0) * (100 - snapProgress(todo.progress_percent))) /
-                    100
-                  ).toFixed(1)} ${t.hourUnit}`
+                estimatedHours > 0
+                  ? `${t.remHours}: ${remainingHours.toFixed(1)} ${t.hourUnit}`
                   : null,
                 todo.ddl ? `${t.dueAt}: ${formatDueWithDays(todo.ddl)}` : null,
                 Number(todo.priority || 0) > 0 ? `${t.priority}: ${priorityNote(Number(todo.priority || 0))}` : null,
@@ -369,7 +420,7 @@ export function TaskManager({
             </div>
             <div className="mt-2 d-flex align-items-center gap-2 flex-wrap" style={{ maxWidth: "520px", width: "100%" }}>
               <span className="small text-muted" style={{ minWidth: "5.4rem", textAlign: "right" }}>
-                {t.progress} {snapProgress(todo.progress_percent)}%
+                {t.progress} {effectiveProgress}%
               </span>
               <input
                 type="range"
@@ -379,7 +430,7 @@ export function TaskManager({
                 max={100}
                 step={10}
                 disabled={todo.status === STATUS_DONE}
-                value={snapProgress(todo.progress_percent)}
+                value={effectiveProgress}
                 onChange={(e) =>
                   updateTodo(todo.id, { progress_percent: Number(e.target.value) })
                 }
@@ -417,6 +468,7 @@ export function TaskManager({
           </div>
 
           <div className="flex-shrink-0 pt-1 d-flex gap-1 ms-auto task-item-actions">
+            {recordedLabel ? <span className="small text-muted align-self-center text-nowrap">{recordedLabel}</span> : null}
             <button
               className="btn btn-sm"
               style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder, color: "#2b2b2b", fontWeight: 600 }}
@@ -453,11 +505,31 @@ export function TaskManager({
           </div>
         </div>
 
-        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <div className="btn-group" role="tablist" aria-label="filters">
-            <button className="btn" disabled={isViewTransitioning} style={yellowButtonStyle(filter === "all")} type="button" onClick={() => handleFilterSwitch("all")}>{t.all}</button>
-            <button className="btn" disabled={isViewTransitioning} style={yellowButtonStyle(filter === "active")} type="button" onClick={() => handleFilterSwitch("active")}>{t.active}</button>
-            <button className="btn" disabled={isViewTransitioning} style={yellowButtonStyle(filter === "done")} type="button" onClick={() => handleFilterSwitch("done")}>{t.done}</button>
+        <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div className="d-flex flex-column gap-2">
+            <div className="btn-group" role="tablist" aria-label="filters">
+              <button className="btn" disabled={isViewTransitioning} style={yellowButtonStyle(filter === "all")} type="button" onClick={() => handleFilterSwitch("all")}>{t.all}</button>
+              <button className="btn" disabled={isViewTransitioning} style={yellowButtonStyle(filter === "active")} type="button" onClick={() => handleFilterSwitch("active")}>{t.active}</button>
+              <button className="btn" disabled={isViewTransitioning} style={yellowButtonStyle(filter === "done")} type="button" onClick={() => handleFilterSwitch("done")}>{t.done}</button>
+            </div>
+
+            <div className="d-flex align-items-center gap-2 flex-wrap" style={{ minWidth: "12rem" }}>
+              <label className="small fw-semibold mb-0">{t.labelFilter}</label>
+              <select
+                className="form-control form-control-sm"
+                value={labelFilter || ""}
+                onChange={(e) => setLabelFilter(e.target.value)}
+                style={{ ...themedSelectStyle, minWidth: "12rem", maxWidth: "16rem" }}
+              >
+                <option value="">{t.labelFilterAll}</option>
+                <option value={unlabeledFilterValue}>{t.labelFilterNoLabel}</option>
+                {(Array.isArray(labelOptions) ? labelOptions : []).map((label) => (
+                  <option key={`label-filter-${label}`} value={label}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="btn-group" role="tablist" aria-label="views">

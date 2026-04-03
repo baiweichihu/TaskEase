@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { ModalShell } from "./ModalShell";
 
 const SUPABASE_URL = "https://ccfmbcvlmlvirkattqnv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_XO9o2kqTKkcnHmGEqCmOoQ_vcNyBGk9";
@@ -140,8 +141,6 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
     }
   }
 
-  if (!isOpen) return null;
-
   const getStatusColor = (status) => {
     switch (status) {
       case "success": return "text-success";
@@ -161,29 +160,13 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
   };
 
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1060,
-        }}
-      />
-
-      <div
-        className="modal d-block"
-        tabIndex="-1"
-        style={{ zIndex: 1070 }}
-      >
+    <ModalShell isOpen={isOpen} onClose={onClose} backdropZIndex={1060} modalZIndex={1070}>
+      {(requestClose) => (
         <div className="modal-dialog" style={{ marginTop: "60px" }}>
-          <div className="modal-content">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title fs-6">数据库诊断工具</h2>
-              <button type="button" className="btn-close" onClick={onClose} />
+              <button type="button" className="btn-close" onClick={requestClose} />
             </div>
             <div className="modal-body">
               <div className="d-grid gap-3">
@@ -218,13 +201,13 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
               >
                 重新诊断
               </button>
-              <button type="button" className="btn btn-secondary" onClick={onClose}>
+              <button type="button" className="btn btn-secondary" onClick={requestClose}>
                 关闭
               </button>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }

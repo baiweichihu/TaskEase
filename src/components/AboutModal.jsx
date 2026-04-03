@@ -1,3 +1,5 @@
+import { ModalShell } from "./ModalShell";
+
 export function AboutModal({
   isOpen,
   onClose,
@@ -5,36 +7,14 @@ export function AboutModal({
   pageBg,
   repoUrl,
 }) {
-  if (!isOpen) return null;
-
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1060,
-          animation: "fadeIn 0.3s ease-in-out",
-        }}
-      />
-
-      <div
-        className="modal d-block"
-        tabIndex="-1"
-        style={{
-          animation: "slideDown 0.4s ease-out",
-          zIndex: 1070,
-        }}
-      >
+    <ModalShell isOpen={isOpen} onClose={onClose} backdropZIndex={1060} modalZIndex={1070}>
+      {(requestClose) => (
         <div className="modal-dialog modal-lg" style={{ marginTop: "60px" }}>
-          <div className="modal-content" style={{ backgroundColor: pageBg }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title fs-6">{t.aboutUs}</h2>
-              <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
+              <button type="button" className="btn-close" aria-label={t.close} onClick={requestClose} />
             </div>
             <div className="modal-body d-grid gap-3">
               <p className="mb-1">{t.aboutSummary}</p>
@@ -53,13 +33,13 @@ export function AboutModal({
               </div>
             </div>
             <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
+              <button type="button" className="btn btn-outline-secondary" onClick={requestClose}>
                 {t.close}
               </button>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }

@@ -1,3 +1,5 @@
+import { ModalShell } from "./ModalShell";
+
 export function AuthModal({
   isOpen,
   onClose,
@@ -23,8 +25,6 @@ export function AuthModal({
   pageBg,
   themeColors,
 }) {
-  if (!isOpen) return null;
-
   const registerUsernameCount = Array.from(registerUsername || "").length;
   const registerUsernameRemaining = Math.max(0, 15 - registerUsernameCount);
 
@@ -35,54 +35,13 @@ export function AuthModal({
   };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div 
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1040,
-          animation: "fadeIn 0.3s ease-in-out",
-        }}
-      />
-      {/* Modal */}
-      <div 
-        className="modal d-block" 
-        tabIndex="-1"
-        style={{
-          animation: "slideDown 0.4s ease-out",
-          zIndex: 1050,
-        }}
-      >
-        <style>{`
-          @keyframes slideDown {
-            from {
-              transform: translateY(-50px);
-              opacity: 0;
-            }
-            to {
-              transform: translateY(0);
-              opacity: 1;
-            }
-          }
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-        `}</style>
+    <ModalShell isOpen={isOpen} onClose={onClose}>
+      {(requestClose) => (
         <div className="modal-dialog" style={{ marginTop: "60px" }}>
-          <div className="modal-content" style={{ backgroundColor: pageBg }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title fs-6">{t.account}</h2>
-              <button type="button" className="btn-close" aria-label={t.close} onClick={onClose} />
+              <button type="button" className="btn-close" aria-label={t.close} onClick={requestClose} />
             </div>
             <div className="modal-body">
               <>
@@ -196,7 +155,7 @@ export function AuthModal({
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }

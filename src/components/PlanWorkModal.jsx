@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { computeWorkPlan } from "../planWork";
+import { ModalShell } from "./ModalShell";
 
 export function PlanWorkModal({
   isOpen,
@@ -21,8 +22,6 @@ export function PlanWorkModal({
     setAlgoHintOpen(false);
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const customInputStyle = {
     backgroundColor: themeColors.listBg,
     borderColor: themeColors.softBtnBorder,
@@ -43,36 +42,10 @@ export function PlanWorkModal({
   }
 
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1040,
-          animation: "fadeIn 0.3s ease-in-out",
-        }}
-      />
-      <div
-        className="modal d-block taskease-modal-enter"
-        tabIndex="-1"
-        style={{ zIndex: 1050 }}
-      >
-        <style>{`
-          @keyframes slideDown {
-            from { transform: translateY(-50px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-        `}</style>
+    <ModalShell isOpen={isOpen} onClose={onClose}>
+      {(requestClose) => (
         <div className="modal-dialog modal-lg" style={{ marginTop: "60px" }}>
-          <div className="modal-content" style={{ backgroundColor: pageBg }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header align-items-center">
               <div className="d-flex align-items-center gap-2 position-relative flex-grow-1 min-w-0">
                 <h2 className="modal-title fs-6 mb-0">{t.planWorkTitle}</h2>
@@ -103,7 +76,7 @@ export function PlanWorkModal({
                   </div>
                 ) : null}
               </div>
-              <button type="button" className="btn-close ms-auto" aria-label={t.close} onClick={onClose} />
+              <button type="button" className="btn-close ms-auto" aria-label={t.close} onClick={requestClose} />
             </div>
             <div className="modal-body d-grid gap-3">
               <form className="d-flex flex-wrap align-items-end gap-2" onSubmit={runPlan}>
@@ -161,7 +134,7 @@ export function PlanWorkModal({
                                   </>
                                 ) : null}
                                 {s.partial ? (
-                                  <span className="text-warning-emphasis"> — {t.planPartial}</span>
+                                  <span className="text-danger"> — {t.planPartial}</span>
                                 ) : null}
                               </div>
                             </li>
@@ -179,14 +152,14 @@ export function PlanWorkModal({
               ) : null}
 
               <div className="d-flex justify-content-end">
-                <button className="btn btn-outline-secondary" type="button" onClick={onClose}>
+                <button className="btn btn-outline-secondary" type="button" onClick={requestClose}>
                   {t.close}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }

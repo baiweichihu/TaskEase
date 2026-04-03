@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ModalShell } from "./ModalShell";
 
 const BG_STORAGE_KEY = "taskease_bg_history";
 
@@ -81,8 +82,6 @@ export function CustomBackgroundModal({
     });
   };
 
-  if (!isOpen) return null;
-
   const sortedBgs = getSortedBackgrounds();
 
   return (
@@ -95,16 +94,16 @@ export function CustomBackgroundModal({
         onChange={handleFileSelect}
       />
 
-      <div className="modal-backdrop fade show" onClick={onClose} />
-      <div className="modal fade show d-block" role="dialog" tabIndex="-1">
+      <ModalShell isOpen={isOpen} onClose={onClose} closeOnBackdrop role="dialog" ariaModal="true">
+        {(requestClose) => (
         <div
           className="modal-dialog modal-dialog-centered"
           style={{ width: "calc(100vw - 24px)", maxWidth: "800px", margin: "0 auto" }}
         >
-          <div className="modal-content" style={{ backgroundColor: pageBg, maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg, maxHeight: "85vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header border-0">
               <h5 className="modal-title fw-semibold">{t.themeCustomBg}</h5>
-              <button type="button" className="btn-close" onClick={onClose} aria-label={t.close} />
+              <button type="button" className="btn-close" onClick={requestClose} aria-label={t.close} />
             </div>
 
             <div style={{ padding: "0 1rem", borderBottom: "1px solid #e0e0e0", display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.85rem" }}>
@@ -160,7 +159,7 @@ export function CustomBackgroundModal({
                   onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                   onClick={() => {
                     onConfirm(bg.dataUrl);
-                    onClose();
+                    requestClose();
                   }}
                 >
                   <div
@@ -220,7 +219,8 @@ export function CustomBackgroundModal({
             )}
           </div>
         </div>
-      </div>
+      )}
+      </ModalShell>
     </>
   );
 }

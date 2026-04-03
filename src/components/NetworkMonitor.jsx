@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ModalShell } from "./ModalShell";
 
 export function NetworkMonitor({ isOpen, onClose, user: _user }) {
   const [requests, setRequests] = useState([]);
@@ -171,32 +172,14 @@ export function NetworkMonitor({ isOpen, onClose, user: _user }) {
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          zIndex: 1060,
-        }}
-      />
-
-      <div
-        className="modal d-block"
-        tabIndex="-1"
-        style={{ zIndex: 1070 }}
-      >
+    <ModalShell isOpen={isOpen} onClose={onClose} backdropZIndex={1060} modalZIndex={1070}>
+      {(requestClose) => (
         <div className="modal-dialog modal-lg" style={{ marginTop: "60px" }}>
-          <div className="modal-content">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title fs-6">网络请求监控</h2>
-              <button type="button" className="btn-close" onClick={onClose} />
+              <button type="button" className="btn-close" onClick={requestClose} />
             </div>
             <div className="modal-body">
               <div className="d-flex gap-2 mb-3">
@@ -272,13 +255,13 @@ export function NetworkMonitor({ isOpen, onClose, user: _user }) {
               </div>
             </div>
             <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={onClose}>
+              <button type="button" className="btn btn-secondary" onClick={requestClose}>
                 关闭
               </button>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      )}
+    </ModalShell>
   );
 }

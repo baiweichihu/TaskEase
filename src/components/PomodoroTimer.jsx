@@ -3,41 +3,72 @@ import { useEffect, useRef, useState } from "react";
 export function PomodoroTimer({
   isActive,
   taskData,
+  onSessionChange,
+  onPersistSession,
   onStop,
   onClose,
 }) {
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [committedSeconds, setCommittedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [nowTs, setNowTs] = useState(() => Date.now());
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [sessionVersion, setSessionVersion] = useState(0);
+  const runningSinceRef = useRef(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  // Reset elapsed time when timer is deactivated
   useEffect(() => {
-    if (!isActive) {
-      setElapsedSeconds(0);
-      setIsRunning(false);
-      setPosition({ x: 0, y: 0 });
-    }
+    if (isActive) return;
+    runningSinceRef.current = null;
+    setCommittedSeconds(0);
+    setIsRunning(false);
+    setNowTs(Date.now());
+    setPosition({ x: 0, y: 0 });
   }, [isActive]);
 
   useEffect(() => {
-    if (taskData?.id) {
-      setElapsedSeconds(0);
-      setIsRunning(false);
-    }
-  }, [taskData?.id]);
+    if (!isActive || !taskData?.id) return;
+    runningSinceRef.current = null;
+    setCommittedSeconds(Math.max(0, Number(taskData.pomodoro_total_seconds || 0)));
+    setIsRunning(false);
+    setNowTs(Date.now());
+    setSessionVersion((prev) => prev + 1);
+  }, [isActive, taskData?.id]);
 
-  // Timer interval
   useEffect(() => {
-    if (!isActive || !isRunning) return;
+    if (!isRunning) return;
 
-    const interval = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
+    function refreshNow() {
+      setNowTs(Date.now());
+    }
 
-    return () => clearInterval(interval);
-  }, [isActive, isRunning]);
+    refreshNow();
+    const intervalId = window.setInterval(refreshNow, 1000);
+    window.addEventListener("focus", refreshNow);
+    document.addEventListener("visibilitychange", refreshNow);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshNow);
+      document.removeEventListener("visibilitychange", refreshNow);
+    }
+  }, [isRunning, sessionVersion]);
+
+  const runningSeconds = isRunning && runningSinceRef.current
+    ? Math.max(0, Math.floor((nowTs - runningSinceRef.current) / 1000))
+    : 0;
+  const elapsedSeconds = committedSeconds + runningSeconds;
+
+  useEffect(() => {
+    if (!isActive || !taskData?.id) return;
+    onSessionChange?.({
+      taskId: taskData.id,
+      committedSeconds,
+      displaySeconds: elapsedSeconds,
+      isRunning,
+      startedAt: runningSinceRef.current,
+    });
+  }, [isActive, taskData?.id, committedSeconds, elapsedSeconds, isRunning, onSessionChange]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -86,6 +117,36 @@ export function PomodoroTimer({
   }
   if (taskData.ddl) taskInfo.push(`截止: ${taskData.ddl}`);
 
+  function getProgressPercent(totalSeconds) {
+    const estimatedHours = Number(taskData.estimated_hours || 0);
+    if (estimatedHours <= 0) return Number(taskData.progress_percent || 0);
+    const percent = (Math.max(0, Number(totalSeconds || 0)) / (estimatedHours * 3600)) * 100;
+    return Math.max(0, Math.min(100, percent));
+  }
+
+  function commitSession(nextSeconds, { closeTimer = false, resetTimer = false } = {}) {
+    const committed = Math.max(0, Math.floor(Number(nextSeconds || 0)));
+    setCommittedSeconds(committed);
+    setIsRunning(false);
+    runningSinceRef.current = null;
+    setNowTs(Date.now());
+    onPersistSession?.({
+      taskId: taskData.id,
+      totalSeconds: committed,
+      progressPercent: getProgressPercent(committed),
+    });
+    if (resetTimer) {
+      setCommittedSeconds(0);
+    }
+    if (closeTimer) {
+      onStop?.({
+        taskId: taskData.id,
+        totalSeconds: committed,
+        progressPercent: getProgressPercent(committed),
+      });
+    }
+  }
+
   function startDrag(event) {
     const timerRect = event.currentTarget.getBoundingClientRect();
     dragOffsetRef.current = {
@@ -96,9 +157,23 @@ export function PomodoroTimer({
   }
 
   function handleStop() {
-    setIsRunning(false);
-    setElapsedSeconds(0);
-    onStop?.();
+    const nextSeconds = isRunning && runningSinceRef.current
+      ? committedSeconds + Math.max(0, Math.floor((Date.now() - runningSinceRef.current) / 1000))
+      : committedSeconds;
+    commitSession(nextSeconds, { closeTimer: true, resetTimer: true });
+  }
+
+  function handleToggleRunning() {
+    if (isRunning) {
+      const nextSeconds = committedSeconds + Math.max(0, Math.floor((Date.now() - (runningSinceRef.current || Date.now())) / 1000));
+      commitSession(nextSeconds, { closeTimer: false, resetTimer: false });
+      return;
+    }
+
+    runningSinceRef.current = Date.now();
+    setIsRunning(true);
+    setNowTs(Date.now());
+    setSessionVersion((prev) => prev + 1);
   }
 
   return (
@@ -137,7 +212,7 @@ export function PomodoroTimer({
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleStop}
           style={{
             border: "none",
             background: "transparent",
@@ -186,7 +261,7 @@ export function PomodoroTimer({
       >
         <button
           type="button"
-          onClick={() => setIsRunning(!isRunning)}
+          onClick={handleToggleRunning}
           style={{
             backgroundColor: "transparent",
             color: "#ffffff",

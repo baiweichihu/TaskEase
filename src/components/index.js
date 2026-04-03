@@ -10,3 +10,5 @@ export { ConfirmModal } from "./ConfirmModal";
 export { CustomBackgroundModal } from "./CustomBackgroundModal";
 export { PomodoroTimer } from "./PomodoroTimer";
 export { AboutModal } from "./AboutModal";
+export { DataStatsModal } from "./DataStatsModal";
+export { ModalShell } from "./ModalShell";
