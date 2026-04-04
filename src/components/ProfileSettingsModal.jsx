@@ -47,7 +47,7 @@ export function ProfileSettingsModal({
             <div className="modal-body d-grid gap-3">
               <div className="d-grid gap-2">
                 <label className="small" style={{ color: "#2b2b2b", fontWeight: 600 }}>{t.emailBoundLabel || t.email}</label>
-                <div className="form-control" style={{ ...inputStyle, opacity: 0.85, cursor: "not-allowed" }} aria-readonly="true">
+                <div style={{ color: "#2b2b2b", opacity: 0.8 }}>
                   {email || "-"}
                 </div>
               </div>

@@ -15,6 +15,11 @@
 - **云端同步：** 本地优先操作，仅在手动/自动同步时与 Supabase 合并
 - **日历管理：** 点击日期查看当天侧边详情，支持拖拽任务到日期格快速改期
 - **重复任务：** 支持每天 / 每周 / 每月重复，完成后自动生成下一次任务
+- **番茄钟管理：** 设置中可统一管理记录，支持修改时长和删除记录
+- **番茄钟上限：** 单任务计时最多 5 小时，达到上限自动停止并关闭计时器
+- **番茄钟数据分层：** `pomodoro_sessions` 作为会话真源，任务累计时长由会话聚合得到
+- **智能截止提示：** 截止剩余时间自动显示为天/小时/分钟，并随三种语言切换
+- **紧急截止高亮：** 未完成任务若截止不足 1 天，截止括号标签会变为红色
 - **响应式设计：** Bootstrap 5 适配各类屏幕尺寸
 - **富通知体验：** 顶部 Toast 通知条，错误/成功消息自动消失
 
@@ -47,6 +52,7 @@ npm run preview
    # 在 Supabase SQL 编辑器中执行以下脚本
    supabase/todos_status_migration.sql      # 任务表迁移 + 新增字段
    supabase/user_preferences.sql            # 用户偏好表创建
+   supabase/pomodoro_sessions_migrate_from_todos_and_drop_column.sql  # 迁移旧番茄钟累计列到会话表并删除旧列
    ```
 
 2. **配置 Supabase 凭证**
@@ -163,6 +169,11 @@ TaskEase/
 - **Cloud Sync:** Local-first operations; sync with Supabase only during manual/auto sync
 - **Calendar Management:** Click a date to open side details and drag tasks to date cells for quick rescheduling
 - **Recurring Tasks:** Daily / weekly / monthly recurrence with auto-next task generation on completion
+- **Pomodoro Manager:** Manage tracked records in Settings, including duration edit and record deletion
+- **Pomodoro Hard Cap:** Per-task timer is capped at 5 hours; it auto-stops and closes when limit is reached
+- **Pomodoro Data Split:** `pomodoro_sessions` is the source of truth; per-task totals are derived by aggregating sessions
+- **Smart Due Countdown:** Remaining due time auto-switches between days/hours/minutes with full 3-language localization
+- **Urgent Due Highlight:** For unfinished tasks with less than 1 day remaining, the due-time bracket label turns red
 - **Responsive Design:** Bootstrap 5 adapts to all screen sizes
 - **Rich Notifications:** Toast notification bar at top; error/success messages auto-dismiss
 
@@ -195,6 +206,7 @@ npm run preview
    # Run the following scripts in Supabase SQL Editor:
    supabase/todos_status_migration.sql      # Task table evolution & new fields
    supabase/user_preferences.sql            # User preferences table creation
+   supabase/pomodoro_sessions_migrate_from_todos_and_drop_column.sql  # Move legacy pomodoro totals into sessions and drop old column
    ```
 
 2. **Configure Supabase Credentials**

@@ -21,6 +21,7 @@ export function Header({
   onLoginClick,
   onLogout,
   onOpenProfileSettings,
+  onOpenPomodoroManage,
   onOpenAbout,
   onOpenDataStats,
   onManualSync,
@@ -260,29 +261,42 @@ export function Header({
 
                 {user ? (
                   <>
-                    <button className="btn btn-sm" type="button" onClick={() => {
-                      onOpenProfileSettings();
-                      closeSettings();
-                    }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
-                      {t.profileSettings}
-                    </button>
-                    <button className="btn btn-sm" type="button" onClick={() => {
-                      onOpenDataStats();
-                      closeSettings();
-                    }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
-                      {t.dataStats}
-                    </button>
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      onClick={() => {
-                        onOpenAbout?.();
+                    {/* Grid layout: 2 columns for data stats and pomodoro, then profile and about */}
+                    <div className="d-grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                      <button className="btn btn-sm" type="button" onClick={() => {
+                        onOpenDataStats();
                         closeSettings();
-                      }}
-                      style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}
-                    >
-                      {t.aboutUs}
-                    </button>
+                      }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
+                        {t.dataStats}
+                      </button>
+                      <button className="btn btn-sm" type="button" onClick={() => {
+                        onOpenPomodoroManage?.();
+                        closeSettings();
+                      }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
+                        {t.pomodoroManage}
+                      </button>
+                    </div>
+                    
+                    <div className="d-grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                      <button className="btn btn-sm" type="button" onClick={() => {
+                        onOpenProfileSettings();
+                        closeSettings();
+                      }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
+                        {t.profileSettings}
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => {
+                          onOpenAbout?.();
+                          closeSettings();
+                        }}
+                        style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}
+                      >
+                        {t.aboutUs}
+                      </button>
+                    </div>
+                    
                     <button 
                       className="btn btn-sm" 
                       type="button" 

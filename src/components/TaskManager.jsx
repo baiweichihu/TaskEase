@@ -117,12 +117,53 @@ export function TaskManager({
     return Math.round((dueDay.getTime() - todayDay.getTime()) / 86400000);
   }
 
-  function formatDueWithDays(iso) {
-    const base = formatDue(iso);
+  function getDueRelativeInfo(iso) {
+    const due = new Date(iso || "");
+    if (!Number.isFinite(due.getTime())) return null;
+
+    const now = Date.now();
+    const deltaMs = due.getTime() - now;
+    const sign = deltaMs < 0 ? "-" : "";
+    const absMs = Math.abs(deltaMs);
+
+    if (absMs < 86400000) {
+      if (absMs < 3600000) {
+        const mins = Math.max(1, Math.ceil(absMs / 60000));
+        if (lang === "en") return { label: `${sign}${mins}m`, isSubDay: true };
+        if (lang === "zh-TW") return { label: `${sign}${mins}分鐘`, isSubDay: true };
+        return { label: `${sign}${mins}分钟`, isSubDay: true };
+      } else {
+        const hours = Math.max(1, Math.floor(absMs / 3600000));
+        if (lang === "en") return { label: `${sign}${hours}h`, isSubDay: true };
+        if (lang === "zh-TW") return { label: `${sign}${hours}小時`, isSubDay: true };
+        return { label: `${sign}${hours}小时`, isSubDay: true };
+      }
+    }
+
     const diff = getDueDayDiff(iso);
-    if (!base || diff === null) return base;
-    const label = diff >= 0 ? `${diff}天` : `-${Math.abs(diff)}天`;
-    return `${base} (${label})`;
+    if (diff === null) return null;
+    if (lang === "en") {
+      return { label: diff >= 0 ? `${diff}d` : `-${Math.abs(diff)}d`, isSubDay: false };
+    } else {
+      return { label: diff >= 0 ? `${diff}天` : `-${Math.abs(diff)}天`, isSubDay: false };
+    }
+  }
+
+  function renderDueMeta(todo) {
+    if (!todo?.ddl) return null;
+    const base = formatDue(todo.ddl);
+    if (!base) return null;
+    const relative = getDueRelativeInfo(todo.ddl);
+    if (!relative?.label) return `${t.dueAt}: ${base}`;
+    const shouldHighlight = todo.status !== STATUS_DONE && relative.isSubDay;
+    return (
+      <>
+        <span>{`${t.dueAt}: ${base} `}</span>
+        <span style={shouldHighlight ? { color: "#d32f2f", fontWeight: 700 } : undefined}>
+          ({relative.label})
+        </span>
+      </>
+    );
   }
 
   function formatTrackedDuration(totalSeconds) {
@@ -405,7 +446,7 @@ export function TaskManager({
                 estimatedHours > 0
                   ? `${t.remHours}: ${remainingHours.toFixed(1)} ${t.hourUnit}`
                   : null,
-                todo.ddl ? `${t.dueAt}: ${formatDueWithDays(todo.ddl)}` : null,
+                renderDueMeta(todo),
                 Number(todo.priority || 0) > 0 ? `${t.priority}: ${priorityNote(Number(todo.priority || 0))}` : null,
                 todo.label ? `${t.label}: ${todo.label}` : null,
                 todo.repeat_rule && todo.repeat_rule !== "none" ? `${t.repeat}: ${repeatRuleNote(todo.repeat_rule)}` : null,

@@ -15,7 +15,15 @@ TaskEase is a modern browser-based task manager built with **React 18** + **Vite
 **Header Section:**
 - Top-right controls:
   - Theme switcher: light 🌙 / dark ☀️ / system 🔄 icons
-  - Settings dropdown (⚙️ icon): language, 12h/24h format, logout button
+  - Settings dropdown (⚙️ icon): Opens a modal with the following layout:
+    - Language, Theme, Theme Palette, Clock Format selectors (full-width rows)
+    - Auto Sync toggle (for authenticated users)
+    - Two-column grid layout:
+      - **Row 1:** Data Statistics | Pomodoro Manager
+      - **Row 2:** Profile Settings | About Us
+    - Manual Sync button (green, full-width)
+    - Logout button (red, full-width, authenticated users only)
+    - For guest users: Login/Register and About Us buttons only
   - Login button (visible when not authenticated)
 
 **Hero Section (Main Dashboard):**
@@ -89,6 +97,13 @@ Located in top-right dropdown (⚙️ icon), contains:
   - Shows two sections:
     - 📊 All-time stats: Total completed tasks + total hours spent
     - 📈 This week: Tasks completed in past 7 days + total hours spent
+
+- **Pomodoro Manager button** (in Settings):
+  - Opens a dedicated modal to manage tracked Pomodoro records
+  - Supports editing tracked duration (in minutes)
+  - Supports deleting tracked records per task
+  - Per-task tracked duration is constrained to a max of 5 hours
+  - Modal colors and typography follow the active theme/global font (no fixed white panel)
   
 - **Logout button:**
   - Only visible when authenticated
@@ -172,7 +187,6 @@ All major modal dialogs now share a reusable modal container component:
 | `remark` | TEXT | No | Task notes/description |
 | `repeat_rule` | TEXT | No | Recurrence rule: none/daily/weekly/monthly |
 | `repeat_until_date` | DATE | No | Recurrence end date (inclusive) |
-| `pomodoro_total_seconds` | INTEGER | No | Accumulated tracked seconds from timer |
 | `created_at` | TIMESTAMPTZ | Yes | Auto-set on insert |
 | `updated_at` | TIMESTAMPTZ | Yes | Auto-updated on row change |
 
@@ -183,6 +197,19 @@ All major modal dialogs now share a reusable modal container component:
 | `language` | TEXT | No | Default: zh-CN; Options: zh-CN, zh-TW, en |
 | `clock_format` | TEXT | No | Default: 24h; Options: 12h, 24h |
 | `theme_mode` | TEXT | No | Default: system; Options: light, dark, system |
+| `created_at` | TIMESTAMPTZ | Yes | Auto-set on insert |
+| `updated_at` | TIMESTAMPTZ | Yes | Auto-updated on row change |
+
+**Pomodoro Sessions Table:**
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | BIGSERIAL | Yes | Primary key |
+| `user_id` | UUID | Yes | Foreign key to auth.users |
+| `task_id` | UUID | No | Foreign key to todos.id (`ON DELETE SET NULL`) |
+| `task_title` | TEXT | No | Snapshot title at record time |
+| `duration_seconds` | BIGINT | Yes | Session duration in seconds |
+| `start_time` | TIMESTAMPTZ | Yes | Session start time |
+| `end_time` | TIMESTAMPTZ | Yes | Session end time |
 | `created_at` | TIMESTAMPTZ | Yes | Auto-set on insert |
 | `updated_at` | TIMESTAMPTZ | Yes | Auto-updated on row change |
 
@@ -231,6 +258,11 @@ All major modal dialogs now share a reusable modal container component:
 - localStorage fallback (key: `taskease_lang`)
 - Selection persists across sessions
 
+**Conflict Handling (multi-window/device):**
+- Settings are local-first in the active client.
+- If local preference keys already exist, cloud values will not overwrite in-memory UI state during preference loading.
+- Current local settings are still written back to cloud via preference autosave/sync, reducing unexpected language/theme rollback.
+
 **Instant Updates:**
 - Changing language via settings dropdown instantly re-renders all strings
 - No page reload required
@@ -270,6 +302,11 @@ All major modal dialogs now share a reusable modal container component:
 - Restore local todos on app load (cloud is optional and merged during sync)
 - Apply composed filters (All/Active/Done + multi-label filter)
 - Render metadata: title, hours, deadline, priority, label, remark
+- Due-time metadata includes localized relative countdown labels:
+  - >= 1 day: day-based label (`d`/`天`)
+  - < 1 day and >= 1 hour: hour-based label (`h`/`小时`/`小時`)
+  - < 1 hour: minute-based label (`m`/`分钟`/`分鐘`)
+- For unfinished tasks with due time under 1 day, the due-time bracket label is highlighted in red.
 - Live update: Changes from other sessions appear with socket/polling (optional future enhancement)
 
 **Update (Edit):**
@@ -300,14 +337,31 @@ All major modal dialogs now share a reusable modal container component:
 ### 2.11 Pomodoro Timer Integration
 - The pomodoro timer records elapsed time from a start timestamp instead of relying on interval tick counts.
 - Pause/resume uses accumulated seconds plus the current running segment, so background tab throttling will not lose actual time.
-- Timer progress and tracked duration are written to `todos.pomodoro_total_seconds` and reflected in task progress.
+- Timer session records are written to `pomodoro_sessions`, and task-level tracked duration is computed by aggregation.
+- On timer stop, a per-session record is inserted into `pomodoro_sessions` (duration, start/end time, task linkage).
 - Task rows show a localized "Tracked / 已计时 / 已計時" label next to the timer button.
 - If recorded pomodoro time exceeds the estimated duration, the task progress display is capped at 100%.
+- A hard limit of 5 hours is enforced per task; when reached during a running session, the timer is force-stopped and the floating timer component closes automatically.
+- **Only one Pomodoro timer can run at a time:** If a user attempts to start a timer while another is active, a Toast notification warns them with the message "Only one Pomodoro can run at a time / 只能同时运行一个番茄钟 / 只能同時運行一個番茄鐘".
+- In Settings, the **Pomodoro Manager modal** displays session records using a wire-free table layout:
+  - Sessions are grouped by date (newest dates first)
+  - Each row contains: **Index | Task Name | Start Time | Duration | Edit/Delete buttons**
+  - No grid lines or borders between rows (except subtle divider under each row)
+  - Index column on the left shows sequential numbering across all dates
+  - Duration displays in h/m/s format (e.g., "1h 23m 45s")
+  - Duration is editable inline (converts to minutes input during edit mode)
+  - Edit and Delete buttons have clear styling with adequate padding
+  - Data loads locally from sync state (no cloud re-fetch on modal open) for instant access
+
+Pomodoro storage model:
+- `pomodoro_sessions`: append-only session-level history and source of truth for timer data.
+- Task-level tracked seconds used in UI/progress are derived by summing `pomodoro_sessions.duration_seconds` grouped by task.
+- `pomodoro_sessions.task_id` is a foreign key to `todos.id` (already defined in schema).
 
 ### 2.11.1 Data Statistics Split (Estimated vs Actual)
 - Data stats modal now reports both:
   - Estimated duration sum (`estimated_hours`)
-  - Actual pomodoro tracked duration (`pomodoro_total_seconds` converted to hours)
+  - Actual pomodoro tracked duration (sum of `pomodoro_sessions.duration_seconds`, converted to hours)
 - Applies to both all-time and last-7-days sections.
 
 Schema policy note:
@@ -321,6 +375,7 @@ Schema policy note:
   - Login/registration errors
   - Sync failures with fallback status
   - Operation status (added task, deleted, etc.)
+  - Pomodoro timer conflicts ("Only one Pomodoro can run at a time")
   - Connection warnings
   
 **Implementation:** `notify(msg)` function sets state, schedules auto-dismiss timer

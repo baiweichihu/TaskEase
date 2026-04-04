@@ -10,9 +10,6 @@ export function DataStatsModal({
   todos,
   STATUS_DONE,
 }) {
-  const now = new Date();
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
   // 计算所有已完成任务的统计
   const allCompleted = useMemo(() => {
     const completed = todos.filter((todo) => todo.status === STATUS_DONE);
@@ -24,6 +21,7 @@ export function DataStatsModal({
 
   // 计算最近一周完成任务的统计
   const weekCompleted = useMemo(() => {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const completed = todos.filter((todo) => {
       if (todo.status !== STATUS_DONE) return false;
       const completedAt = new Date(todo.updated_at || todo.created_at || "");
@@ -34,7 +32,7 @@ export function DataStatsModal({
     const estimatedHours = completed.reduce((sum, todo) => sum + Number(todo.estimated_hours || 0), 0);
     const pomodoroHours = completed.reduce((sum, todo) => sum + Number(todo.pomodoro_total_seconds || 0), 0) / 3600;
     return { totalTasks, estimatedHours: estimatedHours.toFixed(1), pomodoroHours: pomodoroHours.toFixed(1) };
-  }, [todos, STATUS_DONE, oneWeekAgo]);
+  }, [todos, STATUS_DONE]);
 
   const statBoxStyle = {
     backgroundColor: themeColors.listBg,

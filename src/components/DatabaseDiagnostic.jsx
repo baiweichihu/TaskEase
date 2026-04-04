@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ModalShell } from "./ModalShell";
 
@@ -16,13 +16,8 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
   });
   const [details, setDetails] = useState({});
 
-  useEffect(() => {
-    if (!isOpen || !user) return;
-    
-    runDiagnostics();
-  }, [isOpen, user]);
-
-  async function runDiagnostics() {
+  const runDiagnostics = useCallback(async () => {
+    if (!user?.id) return;
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     
     // 1. 测试连接
@@ -139,7 +134,12 @@ export function DatabaseDiagnostic({ isOpen, onClose, user }) {
         testQuery: `测试失败: ${error.message} (代码: ${error.code})` 
       }));
     }
-  }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    void runDiagnostics();
+  }, [isOpen, user, runDiagnostics]);
 
   const getStatusColor = (status) => {
     switch (status) {
