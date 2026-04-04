@@ -69,11 +69,303 @@ function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVeri
   );
 }
 
+function PomodoroManagementModal({
+  isOpen,
+  onClose,
+  t,
+  pageBg,
+  themeColors,
+  resolvedTheme,
+  _records,
+  maxSeconds,
+  onSave,
+  onDelete,
+  isSaving,
+  sessions,
+  isLoadingSession,
+}) {
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingHours, setEditingHours] = useState("0");
+  const [editingMinutes, setEditingMinutes] = useState("0");
+  const textColor = resolvedTheme === "dark" ? "#f8f9fa" : "#2b2b2b";
+
+  useEffect(() => {
+    if (isOpen) return;
+    setEditingSessionId(null);
+    setEditingHours("0");
+    setEditingMinutes("0");
+  }, [isOpen]);
+
+  // Group sessions by date
+  const groupedSessions = useMemo(() => {
+    const groups = {};
+    sessions.forEach((session) => {
+      const startTime = new Date(session.start_time || "");
+      if (!Number.isFinite(startTime.getTime())) return;
+      const dateKey = startTime.toLocaleDateString();
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(session);
+    });
+    // Sort groups by date (newest first) and sort sessions within each group (newest first)
+    return Object.keys(groups)
+      .sort((a, b) => new Date(b) - new Date(a))
+      .map((dateKey) => ({
+        dateKey,
+        sessions: groups[dateKey].sort(
+          (a, b) => new Date(b.start_time) - new Date(a.start_time)
+        ),
+      }));
+  }, [sessions]);
+
+  function formatDuration(totalSeconds) {
+    const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  function formatTimeOnly(isoString) {
+    const d = new Date(isoString);
+    if (!Number.isFinite(d.getTime())) return "-";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function startEditing(session) {
+    const totalSeconds = Math.max(0, Number(session.duration_seconds || 0));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    setEditingSessionId(session.id);
+    setEditingHours(String(hours));
+    setEditingMinutes(String(minutes));
+  }
+
+  async function submitEdit(sessionId) {
+    const hourValue = Number(editingHours);
+    const minuteValue = Number(editingMinutes);
+    if (!Number.isFinite(hourValue) || !Number.isFinite(minuteValue)) return;
+    const totalSeconds = hourValue * 3600 + minuteValue * 60;
+    const safeTotalSeconds = Math.max(0, Math.min(totalSeconds, maxSeconds));
+    const ok = await onSave(sessionId, safeTotalSeconds);
+    if (ok) {
+      setEditingSessionId(null);
+      setEditingHours("0");
+      setEditingMinutes("0");
+    }
+  }
+
+  return (
+    <ModalShell isOpen={isOpen} onClose={onClose}>
+      {(requestClose) => (
+        <div className="modal-dialog" style={{ marginTop: "60px", maxWidth: "1000px" }}>
+          <div className="modal-content" style={{ backgroundColor: pageBg, fontFamily: "inherit" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title fs-6">{t.pomodoroManageTitle}</h2>
+              <button type="button" className="btn-close" aria-label={t.close} onClick={requestClose} />
+            </div>
+            <div className="modal-body d-grid gap-3">
+              <div className="small" style={{ color: textColor, opacity: 0.78 }}>{t.pomodoroManageHint}</div>
+
+              {isLoadingSession ? (
+                <div className="text-center">
+                  <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                </div>
+              ) : groupedSessions.length === 0 ? (
+                <div className="small" style={{ color: textColor, opacity: 0.78 }}>{t.pomodoroManageEmpty}</div>
+              ) : (
+                <div className="d-grid gap-3">
+                  {groupedSessions.map((group, groupIdx) => (
+                    <div key={`group-${group.dateKey}`}>
+                      {/* Date header */}
+                      <div className="small" style={{ color: textColor, opacity: 0.6, marginBottom: "0.5rem" }}>
+                        {group.dateKey}
+                      </div>
+                      
+                      {/* Sessions table-like rows (no borders) */}
+                      <div>
+                        {group.sessions.map((session, sessionIdx) => {
+                          const isEditing = editingSessionId === session.id;
+                          const rowNum = groupedSessions
+                            .slice(0, groupIdx)
+                            .reduce((acc, g) => acc + g.sessions.length, 0) + sessionIdx + 1;
+                          return (
+                            <div
+                              key={`session-${session.id}`}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "40px 1fr 100px 80px 1fr",
+                                gap: "1rem",
+                                alignItems: "center",
+                                paddingBottom: "1rem",
+                                marginBottom: "1rem",
+                                borderBottom: `1px solid ${themeColors.softBtnBorder}`,
+                              }}
+                            >
+                              {/* Index */}
+                              <div style={{ color: textColor, opacity: 0.7, fontSize: "0.9rem" }}>
+                                {rowNum}
+                              </div>
+
+                              {/* Task name */}
+                              <div style={{ color: textColor, fontSize: "0.95rem" }}>
+                                {session.task_title || "Untitled"}
+                              </div>
+
+                              {/* Start time */}
+                              <div style={{ color: textColor, fontSize: "0.9rem", opacity: 0.8 }}>
+                                {formatTimeOnly(session.start_time)}
+                              </div>
+
+                              {/* Duration */}
+                              {isEditing ? (
+                                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    min={0}
+                                    max={Math.floor(maxSeconds / 3600)}
+                                    step={1}
+                                    value={editingHours}
+                                    onChange={(e) => setEditingHours(e.target.value)}
+                                    style={{
+                                      backgroundColor: themeColors.listBg,
+                                      borderColor: themeColors.softBtnBorder,
+                                      color: textColor,
+                                      fontSize: "0.85rem",
+                                      padding: "0.25rem 0.5rem",
+                                      width: "45px",
+                                    }}
+                                  />
+                                  <span style={{ fontSize: "0.85rem", color: textColor }}>h</span>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    min={0}
+                                    max={59}
+                                    step={1}
+                                    value={editingMinutes}
+                                    onChange={(e) => setEditingMinutes(e.target.value)}
+                                    style={{
+                                      backgroundColor: themeColors.listBg,
+                                      borderColor: themeColors.softBtnBorder,
+                                      color: textColor,
+                                      fontSize: "0.85rem",
+                                      padding: "0.25rem 0.5rem",
+                                      width: "45px",
+                                    }}
+                                  />
+                                  <span style={{ fontSize: "0.85rem", color: textColor }}>{t.pomodoroMinutes}</span>
+                                </div>
+                              ) : (
+                                <div style={{ color: textColor, fontSize: "0.9rem" }}>
+                                  {formatDuration(session.duration_seconds)}
+                                </div>
+                              )}
+
+                              {/* Edit/Delete buttons */}
+                              <div className="d-flex gap-2" style={{ justifyContent: "flex-end" }}>
+                                {isEditing ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      disabled={isSaving}
+                                      style={{
+                                        backgroundColor: "#28a745",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "0.35rem 0.65rem",
+                                        fontSize: "0.85rem",
+                                      }}
+                                      onClick={() => {
+                                        void submitEdit(session.id);
+                                      }}
+                                    >
+                                      {t.save}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      disabled={isSaving}
+                                      style={{
+                                        backgroundColor: themeColors.softBtn,
+                                        borderColor: themeColors.softBtnBorder,
+                                        color: "#2b2b2b",
+                                        border: `1px solid ${themeColors.softBtnBorder}`,
+                                        padding: "0.35rem 0.65rem",
+                                        fontSize: "0.85rem",
+                                      }}
+                                      onClick={() => {
+                                        setEditingSessionId(null);
+                                        setEditingMinutes("0");
+                                      }}
+                                    >
+                                      {t.cancel}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      disabled={isSaving}
+                                      style={{
+                                        backgroundColor: themeColors.softBtn,
+                                        borderColor: themeColors.softBtnBorder,
+                                        color: "#2b2b2b",
+                                        border: `1px solid ${themeColors.softBtnBorder}`,
+                                        padding: "0.35rem 0.65rem",
+                                        fontSize: "0.85rem",
+                                      }}
+                                      onClick={() => startEditing(session)}
+                                    >
+                                      {t.edit}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      disabled={isSaving}
+                                      style={{
+                                        backgroundColor: "#d32f2f",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "0.35rem 0.65rem",
+                                        fontSize: "0.85rem",
+                                      }}
+                                      onClick={() => {
+                                        void onDelete(session.id);
+                                      }}
+                                    >
+                                      {t.remove}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
 const SUPABASE_URL = "https://ccfmbcvlmlvirkattqnv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_XO9o2kqTKkcnHmGEqCmOoQ_vcNyBGk9";
 const TODO_TABLE = "todos";
 const PROFILE_TABLE = "profiles";
 const PREFERENCES_TABLE = "user_preferences";
+const POMODORO_SESSIONS_TABLE = "pomodoro_sessions";
+const POMODORO_MAX_SECONDS = 5 * 3600;
 
 const STATUS_PENDING = "pending";
 const STATUS_DONE = "done";
@@ -268,6 +560,16 @@ const TEXT = {
     totalHours: "任务时长",
     estimatedHoursStat: "预计时长",
     pomodoroHoursStat: "番茄钟时长",
+    pomodoroManage: "番茄钟管理",
+    pomodoroManageTitle: "番茄钟管理",
+    pomodoroManageHint: "可在此修改已记录时长或删除记录。单任务番茄钟时长上限为 5 小时。",
+    pomodoroManageEmpty: "暂无番茄钟记录。",
+    pomodoroDuration: "时长",
+    pomodoroMinutes: "分钟",
+    pomodoroLimitReached: "已达到番茄钟上限 5 小时，计时已强制停止。",
+    pomodoroOnlyOne: "只能同时运行一个番茄钟",
+    pomodoroRecordUpdated: "番茄钟记录已更新。",
+    pomodoroRecordDeleted: "番茄钟记录已删除。",
     statsDescription: "累计已完成的任务统计。最近一周基于过去7天内完成的任务。",
     recordedTime: "已计时",
     updateEmail: "更改邮箱",
@@ -477,6 +779,16 @@ const TEXT = {
     totalHours: "任務時長",
     estimatedHoursStat: "預估時長",
     pomodoroHoursStat: "番茄鐘時長",
+    pomodoroManage: "番茄鐘管理",
+    pomodoroManageTitle: "番茄鐘管理",
+    pomodoroManageHint: "可在此修改已記錄時長或刪除記錄。單一任務番茄鐘時長上限為 5 小時。",
+    pomodoroManageEmpty: "暫無番茄鐘記錄。",
+    pomodoroDuration: "時長",
+    pomodoroMinutes: "分鐘",
+    pomodoroLimitReached: "已達番茄鐘上限 5 小時，計時已強制停止。",
+    pomodoroOnlyOne: "只能同時運行一個番茄鐘",
+    pomodoroRecordUpdated: "番茄鐘記錄已更新。",
+    pomodoroRecordDeleted: "番茄鐘記錄已刪除。",
     statsDescription: "累計已完成的任務統計。最近一週基於過去7天內完成的任務。",
     recordedTime: "已計時",
     updateEmail: "變更電子郵件",
@@ -687,6 +999,16 @@ const TEXT = {
     totalHours: "Total Hours",
     estimatedHoursStat: "Estimated Hours",
     pomodoroHoursStat: "Pomodoro Hours",
+    pomodoroManage: "Pomodoro Manager",
+    pomodoroManageTitle: "Pomodoro Manager",
+    pomodoroManageHint: "Edit tracked time or delete records here. Per-task Pomodoro tracking is capped at 5 hours.",
+    pomodoroManageEmpty: "No Pomodoro records yet.",
+    pomodoroDuration: "Duration",
+    pomodoroMinutes: "min",
+    pomodoroLimitReached: "Pomodoro hit the 5-hour limit and was stopped automatically.",
+    pomodoroOnlyOne: "Only one Pomodoro can run at a time",
+    pomodoroRecordUpdated: "Pomodoro record updated.",
+    pomodoroRecordDeleted: "Pomodoro record deleted.",
     statsDescription: "Statistics on all completed tasks. This week counts tasks completed in the past 7 days.",
     recordedTime: "Tracked",
     updateEmail: "Change Email",
@@ -1069,6 +1391,19 @@ function mapTodo(row) {
   };
 }
 
+function applyPomodoroTotals(todoList, totalsByTaskId) {
+  const source = Array.isArray(todoList) ? todoList : [];
+  const totals = totalsByTaskId && typeof totalsByTaskId === "object" ? totalsByTaskId : {};
+  return source.map((todo) => {
+    const id = String(todo?.id || "").trim();
+    const totalSeconds = id ? Math.max(0, Number(totals[id] || 0)) : 0;
+    return {
+      ...todo,
+      pomodoro_total_seconds: totalSeconds,
+    };
+  });
+}
+
 function isTodoLocallyDirtyOrNew(todo, lastSyncAt) {
   if (!todo || typeof todo !== "object") return false;
   if (todo.status === STATUS_DELETED) return true;
@@ -1148,6 +1483,9 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [isDataStatsModalOpen, setIsDataStatsModalOpen] = useState(false);
+  const [isPomodoroManageOpen, setIsPomodoroManageOpen] = useState(false);
+  const [isPomodoroManageSaving, setIsPomodoroManageSaving] = useState(false);
+  const [pomodoroSessions, setPomodoroSessions] = useState([]);
   const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1204,6 +1542,12 @@ export default function App() {
   const prefsReadyForAutoSaveRef = useRef(false);
   const ignoreAuthEventsUntilRef = useRef(0);
   const isLogoutInProgressRef = useRef(false);
+  const loadOrCreateUsernameRef = useRef(null);
+  const loadPomodoroTotalsForTodosRef = useRef(null);
+  const loadPomodoroSessionsRef = useRef(null);
+  const performCloudSyncRef = useRef(null);
+  const savePreferencesRef = useRef(null);
+  const localOnlyNoticeRef = useRef("");
 
   const [todos, setTodos] = useState([]);
   const [timerTaskId, setTimerTaskId] = useState(null);
@@ -1215,9 +1559,19 @@ export default function App() {
     startedAt: null,
   });
   const currentTimerTask = timerTaskId ? todos.find((t) => t.id === timerTaskId) : null;
+  const pomodoroRecords = useMemo(() => {
+    return todos.filter((item) => Math.max(0, Number(item?.pomodoro_total_seconds || 0)) > 0 && item?.status !== STATUS_DELETED);
+  }, [todos]);
 
   const t = TEXT[lang];
   const storageKey = user ? `taskease_todos_${user.id}` : GUEST_KEY;
+
+  loadOrCreateUsernameRef.current = loadOrCreateUsername;
+  loadPomodoroTotalsForTodosRef.current = loadPomodoroTotalsForTodos;
+  loadPomodoroSessionsRef.current = loadPomodoroSessions;
+  performCloudSyncRef.current = performCloudSync;
+  savePreferencesRef.current = savePreferences;
+  localOnlyNoticeRef.current = t.localOnly;
 
   const isCustomBgTheme = themePreset === "custom-bg";
   const paletteTone = isCustomBgTheme ? "light" : resolvedTheme;
@@ -1310,7 +1664,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) {
-      notify(t.localOnly, true);
+      notify(localOnlyNoticeRef.current, true);
       setTodos(readAllLocalTodos());
       return;
     }
@@ -1368,7 +1722,7 @@ export default function App() {
 
       try {
         pushDiag("authSync", "username_load_start", { seq, userId: current.id });
-        const foundName = await withTimeout(loadOrCreateUsername(current), OP_TIMEOUT_MS);
+        const foundName = await withTimeout(loadOrCreateUsernameRef.current(current), OP_TIMEOUT_MS);
         if (!mounted || seq !== authSyncSeqRef.current) return;
         pushDiag("authSync", "username_load_success", { seq, userId: current.id, foundName: foundName || fastName || "user" });
         setUsername(foundName || fastName || "user");
@@ -1403,8 +1757,19 @@ export default function App() {
 
       const localOnlyTodos = mergeTodoLists(readLocalTodos(`taskease_todos_${current.id}`), readLocalTodos(GUEST_KEY));
       pushDiag("authSync", "todos_load_local_only", { seq, userId: current.id, count: localOnlyTodos.length });
-      setTodos(localOnlyTodos);
-      writeLocalTodos(`taskease_todos_${current.id}`, localOnlyTodos);
+      const todosWithPomodoro = await withLockRetry(() => withTimeout(loadPomodoroTotalsForTodosRef.current(current.id, localOnlyTodos), OP_TIMEOUT_MS));
+      setTodos(todosWithPomodoro);
+      writeLocalTodos(`taskease_todos_${current.id}`, todosWithPomodoro);
+
+      // Load Pomodoro sessions in the background (no blocking)
+      try {
+        const sessions = await withTimeout(loadPomodoroSessionsRef.current(current.id), OP_TIMEOUT_MS);
+        if (mounted && seq === authSyncSeqRef.current) {
+          setPomodoroSessions(sessions);
+        }
+      } catch (err) {
+        pushDiag("authSync", "sessions_load_background_error", { seq, userId: current.id, error: String(err?.message || "") }, "warn");
+      }
 
       if (
         localOnlyTodos.length === 0 &&
@@ -1468,16 +1833,21 @@ export default function App() {
   useEffect(() => {
     if (!supabase || !user || !autoSyncEnabled) return;
     const timer = window.setInterval(() => {
-      void performCloudSync("auto");
+      const sync = performCloudSyncRef.current;
+      if (typeof sync === "function") {
+        void sync("auto");
+      }
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [supabase, user, autoSyncEnabled, lang, clockFormat, themeMode, taskLabels]);
+  }, [user, autoSyncEnabled]);
 
   useEffect(() => {
     if (!supabase || !user?.id) return;
     if (!prefsReadyForAutoSaveRef.current) return;
     const timer = window.setTimeout(() => {
-      void savePreferences(user.id, {
+      const save = savePreferencesRef.current;
+      if (typeof save !== "function") return;
+      void save(user.id, {
         language: lang,
         clock_format: clockFormat,
         theme_mode: themeMode,
@@ -1488,7 +1858,7 @@ export default function App() {
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [supabase, user?.id, lang, clockFormat, themeMode, taskLabels, autoSyncEnabled, themePreset, customBackground]);
+  }, [user?.id, lang, clockFormat, themeMode, taskLabels, autoSyncEnabled, themePreset, customBackground]);
 
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
@@ -1537,8 +1907,8 @@ export default function App() {
     const localUserTodos = readLocalTodos(`taskease_todos_${userId}`);
     const guestTodos = readLocalTodos(GUEST_KEY);
 
-    const selectWithRepeat = "id,title,status,estimated_hours,ddl,remark,repeat_rule,repeat_until_date,priority,label,progress_percent,pomodoro_total_seconds,created_at,user_id";
-    const selectLegacy = "id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,pomodoro_total_seconds,created_at,user_id";
+    const selectWithRepeat = "id,title,status,estimated_hours,ddl,remark,repeat_rule,repeat_until_date,priority,label,progress_percent,created_at,user_id";
+    const selectLegacy = "id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id";
 
     const shouldUseRepeatColumns = repeatColumnsSupportedRef.current !== false;
     const primarySelect = shouldUseRepeatColumns ? selectWithRepeat : selectLegacy;
@@ -1581,7 +1951,109 @@ export default function App() {
     }
 
     const cloudMapped = (Array.isArray(data) ? data : []).map(mapTodo);
-    return includeLocal ? mergeTodoLists(cloudMapped, guestTodos, localUserTodos) : cloudMapped;
+    const mergedBase = includeLocal ? mergeTodoLists(cloudMapped, guestTodos, localUserTodos) : cloudMapped;
+    const withPomodoroTotals = await withLockRetry(() => withTimeout(loadPomodoroTotalsForTodos(userId, mergedBase), OP_TIMEOUT_MS));
+    return withPomodoroTotals;
+  }
+
+  async function loadPomodoroTotalsForTodos(userId, todoList) {
+    if (!supabase || !userId) return Array.isArray(todoList) ? todoList : [];
+    const taskIds = (Array.isArray(todoList) ? todoList : [])
+      .map((x) => String(x?.id || "").trim())
+      .filter(Boolean);
+    if (taskIds.length === 0) {
+      return applyPomodoroTotals(todoList, {});
+    }
+
+    const { data, error } = await supabase
+      .from(POMODORO_SESSIONS_TABLE)
+      .select("task_id,duration_seconds")
+      .eq("user_id", userId)
+      .in("task_id", taskIds);
+
+    if (error) {
+      pushDiag("pomodoro", "session_totals_load_failed", { userId, message: String(error.message || "") }, "warn");
+      return applyPomodoroTotals(todoList, {});
+    }
+
+    const totals = {};
+    for (const row of Array.isArray(data) ? data : []) {
+      const id = String(row?.task_id || "").trim();
+      if (!id) continue;
+      totals[id] = Math.max(0, Number(totals[id] || 0) + Number(row?.duration_seconds || 0));
+    }
+    return applyPomodoroTotals(todoList, totals);
+  }
+
+  async function migrateLegacyPomodoroTotalsToSessions(userId, todoList) {
+    if (!supabase || !userId) return;
+    const candidates = (Array.isArray(todoList) ? todoList : [])
+      .map((todo) => ({
+        taskId: String(todo?.id || "").trim(),
+        taskTitle: String(todo?.title || "").trim() || null,
+        totalSeconds: Math.max(0, Math.floor(Number(todo?.pomodoro_total_seconds || 0))),
+      }))
+      .filter((x) => x.taskId && x.totalSeconds > 0);
+
+    if (candidates.length === 0) return;
+
+    const taskIds = candidates.map((x) => x.taskId);
+    const { data, error } = await supabase
+      .from(POMODORO_SESSIONS_TABLE)
+      .select("task_id,duration_seconds")
+      .eq("user_id", userId)
+      .in("task_id", taskIds);
+
+    if (error) {
+      pushDiag("pomodoro", "legacy_migrate_load_failed", { userId, message: String(error.message || "") }, "warn");
+      return;
+    }
+
+    const existingTotals = {};
+    for (const row of Array.isArray(data) ? data : []) {
+      const id = String(row?.task_id || "").trim();
+      if (!id) continue;
+      existingTotals[id] = Math.max(0, Number(existingTotals[id] || 0) + Number(row?.duration_seconds || 0));
+    }
+
+    const endTs = Date.now();
+    const rows = [];
+    for (const item of candidates) {
+      const delta = item.totalSeconds - Math.max(0, Number(existingTotals[item.taskId] || 0));
+      if (delta <= 0) continue;
+      rows.push({
+        user_id: userId,
+        task_id: item.taskId,
+        task_title: item.taskTitle,
+        duration_seconds: delta,
+        start_time: new Date(endTs - delta * 1000).toISOString(),
+        end_time: new Date(endTs).toISOString(),
+      });
+    }
+
+    if (rows.length === 0) return;
+    const insertResult = await withTimeout(supabase.from(POMODORO_SESSIONS_TABLE).insert(rows), OP_TIMEOUT_MS);
+    if (insertResult?.error) {
+      pushDiag("pomodoro", "legacy_migrate_insert_failed", { userId, message: String(insertResult.error.message || "") }, "warn");
+      return;
+    }
+    pushDiag("pomodoro", "legacy_migrate_insert_success", { userId, count: rows.length });
+  }
+
+  async function loadPomodoroSessions(userId) {
+    if (!supabase || !userId) return [];
+    const { data, error } = await supabase
+      .from(POMODORO_SESSIONS_TABLE)
+      .select("id,task_id,task_title,duration_seconds,start_time,end_time")
+      .eq("user_id", userId)
+      .order("start_time", { ascending: false });
+
+    if (error) {
+      pushDiag("pomodoro", "sessions_load_failed", { userId, message: String(error.message || "") }, "warn");
+      return [];
+    }
+
+    return Array.isArray(data) ? data : [];
   }
 
   async function loadPreferences(userId) {
@@ -1603,19 +2075,33 @@ export default function App() {
     }
 
     if (!data) return;
-    if (data.language && (data.language === "zh-CN" || data.language === "zh-TW" || data.language === "en")) setLang(data.language);
-    if (data.clock_format && (data.clock_format === "12h" || data.clock_format === "24h")) setClockFormat(data.clock_format);
-    if (data.theme_mode && (data.theme_mode === "light" || data.theme_mode === "dark" || data.theme_mode === "system")) setThemeMode(data.theme_mode);
+
+    const hasLocalLang = localStorage.getItem(LANG_KEY) !== null;
+    const hasLocalClock = localStorage.getItem(CLOCK_KEY) !== null;
+    const hasLocalThemeMode = localStorage.getItem(THEME_KEY) !== null;
+    const hasLocalAutoSync = localStorage.getItem(AUTO_SYNC_KEY) !== null;
+    const hasLocalThemePreset = localStorage.getItem(THEME_PRESET_KEY) !== null;
+    const hasLocalCustomBg = localStorage.getItem(CUSTOM_BG_KEY) !== null;
+
+    if (!hasLocalLang && data.language && (data.language === "zh-CN" || data.language === "zh-TW" || data.language === "en")) {
+      setLang(data.language);
+    }
+    if (!hasLocalClock && data.clock_format && (data.clock_format === "12h" || data.clock_format === "24h")) {
+      setClockFormat(data.clock_format);
+    }
+    if (!hasLocalThemeMode && data.theme_mode && (data.theme_mode === "light" || data.theme_mode === "dark" || data.theme_mode === "system")) {
+      setThemeMode(data.theme_mode);
+    }
     if (data.task_labels !== undefined && data.task_labels !== null) {
       setTaskLabels(parseTaskLabels(data.task_labels));
     }
-    if (typeof data.auto_sync_enabled === "boolean") {
+    if (!hasLocalAutoSync && typeof data.auto_sync_enabled === "boolean") {
       setAutoSyncEnabled(data.auto_sync_enabled);
     }
-    if (data.theme_preset && ["beige", "pink", "blue", "lavender", "custom-bg"].includes(data.theme_preset)) {
+    if (!hasLocalThemePreset && data.theme_preset && ["beige", "pink", "blue", "lavender", "custom-bg"].includes(data.theme_preset)) {
       setThemePreset(data.theme_preset);
     }
-    if (typeof data.custom_background === "string") {
+    if (!hasLocalCustomBg && typeof data.custom_background === "string") {
       setCustomBackground(data.custom_background);
     }
   }
@@ -1881,7 +2367,6 @@ export default function App() {
         priority,
         label,
         progress_percent: 0,
-        pomodoro_total_seconds: 0,
         created_at: new Date().toISOString(),
         local_dirty: true,
         local_updated_at: new Date().toISOString(),
@@ -1947,19 +2432,11 @@ export default function App() {
       nextPatch.repeat_until_date = effectiveRepeatUntil;
     }
 
-    if (Object.prototype.hasOwnProperty.call(nextPatch, "pomodoro_total_seconds")) {
-      nextPatch.pomodoro_total_seconds = Math.max(0, Number(nextPatch.pomodoro_total_seconds || 0));
-    }
-
     const uiPatch = { ...nextPatch };
     if (hasRepeatPatch || hasRepeatUntilPatch || hasRemarkPatch) {
       uiPatch.remark = sanitizeRemark(uiPatch.remark ?? targetBefore.remark);
       uiPatch.repeat_rule = normalizeRepeatRule(uiPatch.repeat_rule ?? targetBefore.repeat_rule);
       uiPatch.repeat_until_date = normalizeRepeatUntilDate(uiPatch.repeat_until_date ?? targetBefore.repeat_until_date);
-    }
-
-    if (Object.prototype.hasOwnProperty.call(uiPatch, "pomodoro_total_seconds")) {
-      uiPatch.pomodoro_total_seconds = Math.max(0, Number(uiPatch.pomodoro_total_seconds || 0));
     }
 
     const localUpdateTs = new Date().toISOString();
@@ -2001,7 +2478,6 @@ export default function App() {
         priority: Number(baseTodo.priority || 0),
         label: baseTodo.label || null,
         progress_percent: 0,
-        pomodoro_total_seconds: 0,
         created_at: new Date().toISOString(),
         user_id: user?.id || null,
         local_dirty: true,
@@ -2272,6 +2748,12 @@ export default function App() {
   }
 
   function handleStartTimer(taskId) {
+    // Check if there's already an active timer for a different task
+    if (timerTaskId && timerTaskId !== taskId) {
+      notify(t.pomodoroOnlyOne || "只能同时运行一个番茄钟", true);
+      return;
+    }
+    
     setTimerTaskId(taskId);
     const task = todos.find((item) => item.id === taskId);
     const baseSeconds = Math.max(0, Number(task?.pomodoro_total_seconds || 0));
@@ -2304,27 +2786,145 @@ export default function App() {
     const targetTask = todos.find((item) => item.id === taskId);
     if (!targetTask) return;
 
+    const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
     const estimatedHours = Number(targetTask.estimated_hours || 0);
     const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
-    const progressFromTimer = estimatedSeconds > 0 ? Math.min(100, (Number(totalSeconds || 0) / estimatedSeconds) * 100) : snapProgress(targetTask.progress_percent);
+    const progressFromTimer = estimatedSeconds > 0 ? Math.min(100, (normalizedSeconds / estimatedSeconds) * 100) : snapProgress(targetTask.progress_percent);
     await updateTodo(taskId, {
-      pomodoro_total_seconds: Math.max(0, Math.floor(Number(totalSeconds || 0))),
       progress_percent: Math.max(snapProgress(targetTask.progress_percent), snapProgress(progressFromTimer)),
     });
   }
 
+  async function persistPomodoroSessionRecord({ taskId, startedAt, endedAt, sessionSeconds }) {
+    if (!supabase || !user?.id) return false;
+    if (!taskId) return false;
+    const durationSeconds = Math.max(0, Math.floor(Number(sessionSeconds || 0)));
+    if (durationSeconds <= 0) return false;
+
+    const targetTask = todos.find((item) => item.id === taskId);
+    const startTs = Number(startedAt || 0);
+    const endTs = Number(endedAt || 0);
+    const safeEndTs = Number.isFinite(endTs) && endTs > 0 ? endTs : Date.now();
+    const safeStartTs = Number.isFinite(startTs) && startTs > 0
+      ? Math.min(startTs, safeEndTs)
+      : safeEndTs - durationSeconds * 1000;
+
+    const { error } = await withTimeout(
+      supabase.from(POMODORO_SESSIONS_TABLE).insert({
+        user_id: user.id,
+        task_id: taskId,
+        task_title: String(targetTask?.title || "").trim() || null,
+        duration_seconds: durationSeconds,
+        start_time: new Date(safeStartTs).toISOString(),
+        end_time: new Date(safeEndTs).toISOString(),
+      }),
+      OP_TIMEOUT_MS,
+    );
+
+    if (error) {
+      pushDiag("pomodoro", "session_insert_failed", { taskId, message: String(error.message || "") }, "warn");
+      return false;
+    }
+
+    const refreshed = await loadPomodoroTotalsForTodos(user.id, todos);
+    setTodos(refreshed);
+    writeLocalTodos(storageKey, refreshed);
+    pushDiag("pomodoro", "session_insert_success", { taskId, durationSeconds });
+    return true;
+  }
+
   async function handleStopTimer(nextSession = timerSession) {
+    if (nextSession?.reason === "limit_reached") {
+      notify(t.pomodoroLimitReached, false);
+    }
     if (!nextSession?.taskId) {
       setTimerTaskId(null);
       setTimerSession({ taskId: null, totalSeconds: 0, displaySeconds: 0, isRunning: false, startedAt: null });
       return;
     }
+    await persistPomodoroSessionRecord({
+      taskId: nextSession.taskId,
+      startedAt: nextSession.startedAt,
+      endedAt: nextSession.endedAt,
+      sessionSeconds: nextSession.sessionSeconds,
+    });
     setTimerTaskId(null);
     setTimerSession({ taskId: null, totalSeconds: 0, displaySeconds: 0, isRunning: false, startedAt: null });
   }
 
-  function handleCloseTimer() {
-    void handleStopTimer(timerSession);
+  async function handleSavePomodoroRecord(sessionId, totalSeconds) {
+    if (!sessionId) return false;
+    setIsPomodoroManageSaving(true);
+    try {
+      const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
+
+      if (supabase && user?.id) {
+        // Find the session to get task_id and start_time
+        const sessionToUpdate = pomodoroSessions.find((s) => s.id === sessionId);
+        if (!sessionToUpdate) {
+          notify(t.syncFailed, true);
+          return false;
+        }
+
+        // Update the session with new duration
+        const updateResult = await withTimeout(
+          supabase
+            .from(POMODORO_SESSIONS_TABLE)
+            .update({
+              duration_seconds: normalizedSeconds,
+              end_time: new Date(new Date(sessionToUpdate.start_time).getTime() + normalizedSeconds * 1000).toISOString(),
+            })
+            .eq("id", sessionId),
+          OP_TIMEOUT_MS,
+        );
+
+        if (updateResult?.error) {
+          notify(`${t.syncFailed}: ${String(updateResult.error.message || updateResult.error)}`, true);
+          return false;
+        }
+
+        // Refresh sessions and todos
+        const sessions = await loadPomodoroSessions(user.id);
+        setPomodoroSessions(sessions);
+        const refreshed = await loadPomodoroTotalsForTodos(user.id, todos);
+        setTodos(refreshed);
+        writeLocalTodos(storageKey, refreshed);
+      }
+      notify(t.pomodoroRecordUpdated, false);
+      return true;
+    } finally {
+      setIsPomodoroManageSaving(false);
+    }
+  }
+
+  async function handleDeletePomodoroRecord(sessionId) {
+    if (!sessionId) return false;
+    setIsPomodoroManageSaving(true);
+    try {
+      if (supabase && user?.id) {
+        const { error } = await withTimeout(
+          supabase
+            .from(POMODORO_SESSIONS_TABLE)
+            .delete()
+            .eq("id", sessionId),
+          OP_TIMEOUT_MS,
+        );
+        if (error) {
+          notify(`${t.syncFailed}: ${String(error.message || error)}`, true);
+          return false;
+        }
+        // Refresh sessions and todos
+        const sessions = await loadPomodoroSessions(user.id);
+        setPomodoroSessions(sessions);
+        const refreshed = await loadPomodoroTotalsForTodos(user.id, todos);
+        setTodos(refreshed);
+        writeLocalTodos(storageKey, refreshed);
+      }
+      notify(t.pomodoroRecordDeleted, false);
+      return true;
+    } finally {
+      setIsPomodoroManageSaving(false);
+    }
   }
 
   async function handleLogout() {
@@ -2536,6 +3136,7 @@ export default function App() {
       }
 
       if (syncableTodos.length > 0) {
+        await migrateLegacyPomodoroTotalsToSessions(user.id, syncableTodos);
         const rows = syncableTodos.map((x) => ({
           id: x.id || crypto.randomUUID(),
           title: String(x.title || "").trim() || "Untitled",
@@ -2548,12 +3149,11 @@ export default function App() {
           priority: Number(x.priority ?? 0),
           label: x.label || null,
           progress_percent: snapProgress(x.progress_percent ?? 0),
-          pomodoro_total_seconds: Math.max(0, Number(x.pomodoro_total_seconds ?? 0)),
           created_at: x.created_at || new Date().toISOString(),
           user_id: user.id,
         }));
 
-        const toLegacyRows = () => rows.map(({ repeat_rule, repeat_until_date, ...rest }) => rest);
+        const toLegacyRows = () => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
         const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
 
         let upsertResult = await withLockRetry(
@@ -2586,7 +3186,7 @@ export default function App() {
         if (!id) return false;
         return isTodoLocallyDirtyOrNew(x, lastSyncAt) && x.status !== STATUS_DELETED;
       });
-      const mergedTodos = mergeTodoLists(cloudTodos, localUnsynced).map((todo) => {
+      const mergedTodosBase = mergeTodoLists(cloudTodos, localUnsynced).map((todo) => {
         if (!todo || typeof todo !== "object") return todo;
         const cleaned = { ...todo };
         delete cleaned.local_dirty;
@@ -2594,6 +3194,7 @@ export default function App() {
         delete cleaned.deleted_at;
         return cleaned;
       });
+      const mergedTodos = await loadPomodoroTotalsForTodos(user.id, mergedTodosBase);
       setTodos(mergedTodos);
       writeLocalTodos(storageKey, mergedTodos);
       setLastSyncAt(user.id, new Date().toISOString());
@@ -2652,6 +3253,7 @@ export default function App() {
     setIsMigratingLocalData(true);
     try {
       if (guestTodos.length > 0) {
+        await migrateLegacyPomodoroTotalsToSessions(user.id, guestTodos);
         const rows = guestTodos.map((x) => ({
           id: x.id || crypto.randomUUID(),
           title: String(x.title || "").trim() || "Untitled",
@@ -2664,12 +3266,11 @@ export default function App() {
           priority: Number(x.priority ?? 0),
           label: x.label || null,
           progress_percent: snapProgress(x.progress_percent ?? 0),
-          pomodoro_total_seconds: Math.max(0, Number(x.pomodoro_total_seconds ?? 0)),
           created_at: x.created_at || new Date().toISOString(),
           user_id: user.id,
         }));
 
-        const toLegacyRows = () => rows.map(({ repeat_rule, repeat_until_date, ...rest }) => rest);
+        const toLegacyRows = () => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
         const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
 
         let { error } = await withTimeout(
@@ -2776,6 +3377,9 @@ export default function App() {
             onOpenProfileSettings={() => setIsProfileModalOpen(true)}
             onOpenAbout={() => setIsAboutModalOpen(true)}
             onOpenDataStats={() => setIsDataStatsModalOpen(true)}
+            onOpenPomodoroManage={() => {
+              setIsPomodoroManageOpen(true);
+            }}
             onManualSync={handleManualSync}
             isSyncing={isSyncing}
             autoSyncEnabled={autoSyncEnabled}
@@ -2952,6 +3556,22 @@ export default function App() {
           STATUS_DONE={STATUS_DONE}
         />
 
+        <PomodoroManagementModal
+          isOpen={isPomodoroManageOpen}
+          onClose={() => setIsPomodoroManageOpen(false)}
+          t={t}
+          pageBg={pageBg}
+          themeColors={themeColors}
+          resolvedTheme={resolvedTheme}
+          records={pomodoroRecords}
+          maxSeconds={POMODORO_MAX_SECONDS}
+          onSave={handleSavePomodoroRecord}
+          onDelete={handleDeletePomodoroRecord}
+          isSaving={isPomodoroManageSaving}
+          sessions={pomodoroSessions}
+          isLoadingSession={false}
+        />
+
         <OtpModal
           isOpen={isOtpModalOpen}
           onClose={() => setIsOtpModalOpen(false)}
@@ -2971,7 +3591,7 @@ export default function App() {
           onSessionChange={handleTimerSessionChange}
           onPersistSession={handleTimerSessionPersist}
           onStop={handleStopTimer}
-          onClose={handleCloseTimer}
+          maxSeconds={POMODORO_MAX_SECONDS}
         />
       </div>
     </main>

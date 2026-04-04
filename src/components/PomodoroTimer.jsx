@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function PomodoroTimer({
   isActive,
@@ -6,7 +6,7 @@ export function PomodoroTimer({
   onSessionChange,
   onPersistSession,
   onStop,
-  onClose,
+  maxSeconds = 5 * 3600,
 }) {
   const [committedSeconds, setCommittedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -33,7 +33,7 @@ export function PomodoroTimer({
     setIsRunning(false);
     setNowTs(Date.now());
     setSessionVersion((prev) => prev + 1);
-  }, [isActive, taskData?.id]);
+  }, [isActive, taskData?.id, taskData?.pomodoro_total_seconds]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -57,7 +57,47 @@ export function PomodoroTimer({
   const runningSeconds = isRunning && runningSinceRef.current
     ? Math.max(0, Math.floor((nowTs - runningSinceRef.current) / 1000))
     : 0;
-  const elapsedSeconds = committedSeconds + runningSeconds;
+  const elapsedSeconds = Math.min(maxSeconds, committedSeconds + runningSeconds);
+
+  const getProgressPercent = useCallback((totalSeconds) => {
+    const estimatedHours = Number(taskData?.estimated_hours || 0);
+    if (estimatedHours <= 0) return Number(taskData?.progress_percent || 0);
+    const percent = (Math.max(0, Number(totalSeconds || 0)) / (estimatedHours * 3600)) * 100;
+    return Math.max(0, Math.min(100, percent));
+  }, [taskData?.estimated_hours, taskData?.progress_percent]);
+
+  const commitSession = useCallback((nextSeconds, { closeTimer = false, resetTimer = false, stopReason = "manual" } = {}) => {
+    if (!taskData?.id) return;
+    const committed = Math.max(0, Math.floor(Number(nextSeconds || 0)));
+    const startedAt = isRunning ? runningSinceRef.current : null;
+    const endedAt = Date.now();
+    const sessionSeconds = isRunning
+      ? Math.max(0, Math.floor((endedAt - Number(startedAt || endedAt)) / 1000))
+      : 0;
+    setCommittedSeconds(committed);
+    setIsRunning(false);
+    runningSinceRef.current = null;
+    setNowTs(Date.now());
+    onPersistSession?.({
+      taskId: taskData.id,
+      totalSeconds: committed,
+      progressPercent: getProgressPercent(committed),
+    });
+    if (resetTimer) {
+      setCommittedSeconds(0);
+    }
+    if (closeTimer) {
+      onStop?.({
+        taskId: taskData.id,
+        totalSeconds: committed,
+        progressPercent: getProgressPercent(committed),
+        reason: stopReason,
+        startedAt,
+        endedAt,
+        sessionSeconds,
+      });
+    }
+  }, [getProgressPercent, isRunning, onPersistSession, onStop, taskData?.id]);
 
   useEffect(() => {
     if (!isActive || !taskData?.id) return;
@@ -95,6 +135,12 @@ export function PomodoroTimer({
     };
   }, [isDragging]);
 
+  useEffect(() => {
+    if (!isActive || !taskData?.id || !isRunning) return;
+    if (elapsedSeconds < maxSeconds) return;
+    commitSession(maxSeconds, { closeTimer: true, resetTimer: false, stopReason: "limit_reached" });
+  }, [isActive, taskData?.id, isRunning, elapsedSeconds, maxSeconds, commitSession]);
+
   if (!isActive || !taskData) return null;
 
   const formatTime = (seconds) => {
@@ -117,36 +163,6 @@ export function PomodoroTimer({
   }
   if (taskData.ddl) taskInfo.push(`截止: ${taskData.ddl}`);
 
-  function getProgressPercent(totalSeconds) {
-    const estimatedHours = Number(taskData.estimated_hours || 0);
-    if (estimatedHours <= 0) return Number(taskData.progress_percent || 0);
-    const percent = (Math.max(0, Number(totalSeconds || 0)) / (estimatedHours * 3600)) * 100;
-    return Math.max(0, Math.min(100, percent));
-  }
-
-  function commitSession(nextSeconds, { closeTimer = false, resetTimer = false } = {}) {
-    const committed = Math.max(0, Math.floor(Number(nextSeconds || 0)));
-    setCommittedSeconds(committed);
-    setIsRunning(false);
-    runningSinceRef.current = null;
-    setNowTs(Date.now());
-    onPersistSession?.({
-      taskId: taskData.id,
-      totalSeconds: committed,
-      progressPercent: getProgressPercent(committed),
-    });
-    if (resetTimer) {
-      setCommittedSeconds(0);
-    }
-    if (closeTimer) {
-      onStop?.({
-        taskId: taskData.id,
-        totalSeconds: committed,
-        progressPercent: getProgressPercent(committed),
-      });
-    }
-  }
-
   function startDrag(event) {
     const timerRect = event.currentTarget.getBoundingClientRect();
     dragOffsetRef.current = {
@@ -160,13 +176,18 @@ export function PomodoroTimer({
     const nextSeconds = isRunning && runningSinceRef.current
       ? committedSeconds + Math.max(0, Math.floor((Date.now() - runningSinceRef.current) / 1000))
       : committedSeconds;
-    commitSession(nextSeconds, { closeTimer: true, resetTimer: true });
+    commitSession(nextSeconds, { closeTimer: true, resetTimer: true, stopReason: "manual" });
   }
 
   function handleToggleRunning() {
     if (isRunning) {
       const nextSeconds = committedSeconds + Math.max(0, Math.floor((Date.now() - (runningSinceRef.current || Date.now())) / 1000));
       commitSession(nextSeconds, { closeTimer: false, resetTimer: false });
+      return;
+    }
+
+    if (committedSeconds >= maxSeconds) {
+      commitSession(maxSeconds, { closeTimer: true, resetTimer: false, stopReason: "limit_reached" });
       return;
     }
 

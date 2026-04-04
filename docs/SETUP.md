@@ -129,11 +129,12 @@ npm run dev
 
 ### Database Schema
 
-TaskEase uses three main tables:
+TaskEase uses four main tables:
 
 - **profiles**: User profile information
 - **todos**: Task management
 - **user_preferences**: User settings and preferences
+- **pomodoro_sessions**: Pomodoro session history (task-linked timer records)
 
 All tables have Row Level Security (RLS) enabled for data protection.
 
