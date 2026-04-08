@@ -32,6 +32,12 @@ export function TaskManager({
   const activeTimerTaskId = timerSession?.taskId || null;
   const activeTimerDisplaySeconds = Math.max(0, Number(timerSession?.displaySeconds || 0));
 
+  function normalizeProgress(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.min(100, Math.round(numeric)));
+  }
+
   function yellowButtonStyle(active) {
     return {
       backgroundColor: active ? themeColors.activeBtn : themeColors.softBtn,
@@ -415,8 +421,8 @@ export function TaskManager({
     const recordedSeconds = activeTimerTaskId === todo.id ? activeTimerDisplaySeconds : baseRecordedSeconds;
     const estimatedHours = Number(todo.estimated_hours || 0);
     const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
-    const timerProgressPercent = estimatedSeconds > 0 ? Math.min(100, (recordedSeconds / estimatedSeconds) * 100) : snapProgress(todo.progress_percent);
-    const effectiveProgress = Math.max(snapProgress(todo.progress_percent), snapProgress(timerProgressPercent));
+    const timerProgressPercent = estimatedSeconds > 0 ? (recordedSeconds / estimatedSeconds) * 100 : normalizeProgress(todo.progress_percent);
+    const effectiveProgress = Math.max(normalizeProgress(todo.progress_percent), normalizeProgress(timerProgressPercent));
     const remainingHours = estimatedHours > 0 ? Math.max(0, estimatedHours - recordedSeconds / 3600) : null;
     const recordedLabel = recordedSeconds > 0 ? `${t.recordedTime || "已计时"}: ${formatTrackedDuration(recordedSeconds)}` : null;
     return (
@@ -473,7 +479,7 @@ export function TaskManager({
                 disabled={todo.status === STATUS_DONE}
                 value={effectiveProgress}
                 onChange={(e) =>
-                  updateTodo(todo.id, { progress_percent: Number(e.target.value) })
+                  updateTodo(todo.id, { progress_percent: Number(e.target.value) }, { snapProgressToStep: true })
                 }
                 aria-label={t.progress}
               />

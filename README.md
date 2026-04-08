@@ -18,6 +18,8 @@
 - **番茄钟管理：** 设置中可统一管理记录，支持修改时长和删除记录
 - **番茄钟上限：** 单任务计时最多 5 小时，达到上限自动停止并关闭计时器
 - **番茄钟数据分层：** `pomodoro_sessions` 作为会话真源，任务累计时长由会话聚合得到
+- **番茄钟进度规则：** 自动计时进度按 1% 精度更新；手动滑条仍按 10% 档位调整
+- **暂停/继续安全写入：** 结束计时时按本次会话累计增量落库，不会丢失暂停前已计时部分
 - **智能截止提示：** 截止剩余时间自动显示为天/小时/分钟，并随三种语言切换
 - **紧急截止高亮：** 未完成任务若截止不足 1 天，截止括号标签会变为红色
 - **响应式设计：** Bootstrap 5 适配各类屏幕尺寸
@@ -172,6 +174,8 @@ TaskEase/
 - **Pomodoro Manager:** Manage tracked records in Settings, including duration edit and record deletion
 - **Pomodoro Hard Cap:** Per-task timer is capped at 5 hours; it auto-stops and closes when limit is reached
 - **Pomodoro Data Split:** `pomodoro_sessions` is the source of truth; per-task totals are derived by aggregating sessions
+- **Pomodoro Progress Rule:** Auto timer updates use 1% precision, while manual slider adjustments stay on 10% steps
+- **Pause/Resume Safe Persistence:** Timer stop writes the full accumulated session delta so pre-pause time is not lost
 - **Smart Due Countdown:** Remaining due time auto-switches between days/hours/minutes with full 3-language localization
 - **Urgent Due Highlight:** For unfinished tasks with less than 1 day remaining, the due-time bracket label turns red
 - **Responsive Design:** Bootstrap 5 adapts to all screen sizes

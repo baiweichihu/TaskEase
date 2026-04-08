@@ -1183,7 +1183,7 @@ function readLocalTodos(key) {
         repeat_rule: normalizeRepeatRule(item?.repeat_rule ?? parsedRepeat.repeat_rule),
         repeat_until_date: normalizeRepeatUntilDate(item?.repeat_until_date ?? parsedRepeat.repeat_until_date),
         pomodoro_total_seconds: Math.max(0, Number(item?.pomodoro_total_seconds ?? 0)),
-        progress_percent: snapProgress(item?.progress_percent),
+        progress_percent: normalizeProgress(item?.progress_percent),
         estimated_hours: Number(item?.estimated_hours ?? 0),
         priority: Number(item?.priority ?? 0),
       };
@@ -1274,6 +1274,12 @@ function snapProgress(v) {
   if (!Number.isFinite(x)) return 0;
   const c = Math.round(x / 10) * 10;
   return Math.max(0, Math.min(100, c));
+}
+
+function normalizeProgress(v) {
+  const x = Number(v);
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(100, Math.round(x)));
 }
 
 function toDatetimeLocalValue(iso) {
@@ -1382,7 +1388,7 @@ function mapTodo(row) {
     pomodoro_total_seconds: Math.max(0, Number(row.pomodoro_total_seconds ?? 0)),
     priority: Number(row.priority ?? 0),
     label: row.label ?? "",
-    progress_percent: snapProgress(row.progress_percent ?? 0),
+    progress_percent: normalizeProgress(row.progress_percent ?? 0),
     user_id: row.user_id,
     created_at: row.created_at,
     local_dirty: Boolean(row.local_dirty),
@@ -1973,7 +1979,8 @@ export default function App() {
 
     if (error) {
       pushDiag("pomodoro", "session_totals_load_failed", { userId, message: String(error.message || "") }, "warn");
-      return applyPomodoroTotals(todoList, {});
+      // Keep current totals instead of wiping UI data when loading session totals fails.
+      return Array.isArray(todoList) ? todoList : [];
     }
 
     const totals = {};
@@ -2407,14 +2414,17 @@ export default function App() {
     });
   }
 
-  async function updateTodo(id, patch) {
+  async function updateTodo(id, patch, options = {}) {
+    const { snapProgressToStep = false } = options;
     const previous = todos;
     const targetBefore = previous.find((item) => item.id === id);
     if (!targetBefore) return;
 
     const nextPatch = { ...patch };
     if (nextPatch.progress_percent != null) {
-      nextPatch.progress_percent = snapProgress(nextPatch.progress_percent);
+      nextPatch.progress_percent = snapProgressToStep
+        ? snapProgress(nextPatch.progress_percent)
+        : normalizeProgress(nextPatch.progress_percent);
     }
 
     const hasRepeatPatch = Object.prototype.hasOwnProperty.call(nextPatch, "repeat_rule");
@@ -2789,9 +2799,9 @@ export default function App() {
     const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
     const estimatedHours = Number(targetTask.estimated_hours || 0);
     const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
-    const progressFromTimer = estimatedSeconds > 0 ? Math.min(100, (normalizedSeconds / estimatedSeconds) * 100) : snapProgress(targetTask.progress_percent);
+    const progressFromTimer = estimatedSeconds > 0 ? (normalizedSeconds / estimatedSeconds) * 100 : normalizeProgress(targetTask.progress_percent);
     await updateTodo(taskId, {
-      progress_percent: Math.max(snapProgress(targetTask.progress_percent), snapProgress(progressFromTimer)),
+      progress_percent: Math.max(normalizeProgress(targetTask.progress_percent), normalizeProgress(progressFromTimer)),
     });
   }
 
@@ -2826,12 +2836,33 @@ export default function App() {
       return false;
     }
 
-    const refreshed = await loadPomodoroTotalsForTodos(user.id, todos);
+    const [sessions, refreshed] = await Promise.all([
+      loadPomodoroSessions(user.id),
+      loadPomodoroTotalsForTodos(user.id, todos),
+    ]);
+    setPomodoroSessions(sessions);
     setTodos(refreshed);
     writeLocalTodos(storageKey, refreshed);
     pushDiag("pomodoro", "session_insert_success", { taskId, durationSeconds });
     return true;
   }
+
+  useEffect(() => {
+    if (!isPomodoroManageOpen || !user?.id) return;
+    let cancelled = false;
+
+    async function refreshSessionsWhenManageOpens() {
+      const sessions = await loadPomodoroSessions(user.id);
+      if (cancelled) return;
+      setPomodoroSessions(sessions);
+    }
+
+    void refreshSessionsWhenManageOpens();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPomodoroManageOpen, user?.id]);
 
   async function handleStopTimer(nextSession = timerSession) {
     if (nextSession?.reason === "limit_reached") {
@@ -3148,7 +3179,7 @@ export default function App() {
           repeat_until_date: normalizeRepeatUntilDate(x.repeat_until_date) || null,
           priority: Number(x.priority ?? 0),
           label: x.label || null,
-          progress_percent: snapProgress(x.progress_percent ?? 0),
+          progress_percent: normalizeProgress(x.progress_percent ?? 0),
           created_at: x.created_at || new Date().toISOString(),
           user_id: user.id,
         }));
@@ -3265,7 +3296,7 @@ export default function App() {
           repeat_until_date: normalizeRepeatUntilDate(x.repeat_until_date) || null,
           priority: Number(x.priority ?? 0),
           label: x.label || null,
-          progress_percent: snapProgress(x.progress_percent ?? 0),
+          progress_percent: normalizeProgress(x.progress_percent ?? 0),
           created_at: x.created_at || new Date().toISOString(),
           user_id: user.id,
         }));

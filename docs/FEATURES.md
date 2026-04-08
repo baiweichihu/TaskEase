@@ -339,7 +339,11 @@ All major modal dialogs now share a reusable modal container component:
 - Pause/resume uses accumulated seconds plus the current running segment, so background tab throttling will not lose actual time.
 - Timer session records are written to `pomodoro_sessions`, and task-level tracked duration is computed by aggregation.
 - On timer stop, a per-session record is inserted into `pomodoro_sessions` (duration, start/end time, task linkage).
+- On timer stop after pause/resume cycles, persisted duration uses the full accumulated delta of the current timer session, not only the final run segment.
 - Task rows show a localized "Tracked / 已计时 / 已計時" label next to the timer button.
+- Auto timer-derived progress is stored and displayed with 1% precision (integer percentage), capped at 100%.
+- Manual slider-driven progress remains constrained to 10% steps.
+- If users manually adjust after an auto value (for example 46%), subsequent manual values stay on 10% steps and do not revert to that non-step value unless timer-derived progress later exceeds it.
 - If recorded pomodoro time exceeds the estimated duration, the task progress display is capped at 100%.
 - A hard limit of 5 hours is enforced per task; when reached during a running session, the timer is force-stopped and the floating timer component closes automatically.
 - **Only one Pomodoro timer can run at a time:** If a user attempts to start a timer while another is active, a Toast notification warns them with the message "Only one Pomodoro can run at a time / 只能同时运行一个番茄钟 / 只能同時運行一個番茄鐘".
@@ -351,7 +355,7 @@ All major modal dialogs now share a reusable modal container component:
   - Duration displays in h/m/s format (e.g., "1h 23m 45s")
   - Duration is editable inline (converts to minutes input during edit mode)
   - Edit and Delete buttons have clear styling with adequate padding
-  - Data loads locally from sync state (no cloud re-fetch on modal open) for instant access
+  - Modal triggers a session refresh on open to keep records consistent with the latest timer write
 
 Pomodoro storage model:
 - `pomodoro_sessions`: append-only session-level history and source of truth for timer data.
