@@ -1772,9 +1772,11 @@ export default function App() {
         const sessions = await withTimeout(loadPomodoroSessionsRef.current(current.id), OP_TIMEOUT_MS);
         if (mounted && seq === authSyncSeqRef.current) {
           setPomodoroSessions(sessions);
+          pushDiag("authSync", "sessions_load_background_success", { seq, userId: current.id, count: sessions.length });
         }
       } catch (err) {
-        pushDiag("authSync", "sessions_load_background_error", { seq, userId: current.id, error: String(err?.message || "") }, "warn");
+        const isTimeout = String(err?.message || "") === "TIMEOUT";
+        pushDiag("authSync", isTimeout ? "sessions_load_background_timeout" : "sessions_load_background_error", { seq, userId: current.id, error: String(err?.message || "") }, "warn");
       }
 
       if (
@@ -2852,9 +2854,15 @@ export default function App() {
     let cancelled = false;
 
     async function refreshSessionsWhenManageOpens() {
-      const sessions = await loadPomodoroSessions(user.id);
-      if (cancelled) return;
-      setPomodoroSessions(sessions);
+      try {
+        const sessions = await loadPomodoroSessions(user.id);
+        if (cancelled) return;
+        setPomodoroSessions(sessions);
+        pushDiag("pomodoro", "manager_modal_refresh_success", { userId: user.id, count: sessions.length });
+      } catch (err) {
+        if (cancelled) return;
+        pushDiag("pomodoro", "manager_modal_refresh_error", { userId: user.id, error: String(err?.message || err) }, "warn");
+      }
     }
 
     void refreshSessionsWhenManageOpens();
@@ -2978,6 +2986,8 @@ export default function App() {
     setUser(null);
     setUsername("");
     setTodos(readLocalTodos(GUEST_KEY));
+    setPomodoroSessions([]);
+    setIsPomodoroManageOpen(false);
     setIsAuthModalOpen(false);
     previousUserIdRef.current = null;
     autoSyncInFlightRef.current = false;
