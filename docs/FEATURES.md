@@ -348,14 +348,18 @@ All major modal dialogs now share a reusable modal container component:
 - A hard limit of 5 hours is enforced per task; when reached during a running session, the timer is force-stopped and the floating timer component closes automatically.
 - **Only one Pomodoro timer can run at a time:** If a user attempts to start a timer while another is active, a Toast notification warns them with the message "Only one Pomodoro can run at a time / 只能同时运行一个番茄钟 / 只能同時運行一個番茄鐘".
 - In Settings, the **Pomodoro Manager modal** displays session records using a wire-free table layout:
-  - Sessions are grouped by date (newest dates first)
+  - **Date filter:** A date input field at the top allows users to view sessions for a specific date (defaults to today's date)
+  - Sessions are grouped by the selected date only (not grouped by multiple dates like before)
+  - When no records exist for the selected date, displays "No records for this date / 该日期暂无记录 / 該日期暫無記錄"
+  - When no records exist in the entire database, displays "No Pomodoro records / 暂无番茄钟记录 / 暫無番茄鐘記錄"
   - Each row contains: **Index | Task Name | Start Time | Duration | Edit/Delete buttons**
   - No grid lines or borders between rows (except subtle divider under each row)
-  - Index column on the left shows sequential numbering across all dates
+  - Index column on the left shows sequential numbering across all rows for the selected date
   - Duration displays in h/m/s format (e.g., "1h 23m 45s")
   - Duration is editable inline (converts to minutes input during edit mode)
   - Edit and Delete buttons have clear styling with adequate padding
   - Modal triggers a session refresh on open to keep records consistent with the latest timer write
+  - Loading spinner displays while sessions are being fetched (fixes race condition where modal appeared empty on first open)
 
 Pomodoro storage model:
 - `pomodoro_sessions`: append-only session-level history and source of truth for timer data.
