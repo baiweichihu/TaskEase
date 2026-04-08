@@ -15,11 +15,13 @@ export function PomodoroTimer({
   const [isDragging, setIsDragging] = useState(false);
   const [sessionVersion, setSessionVersion] = useState(0);
   const runningSinceRef = useRef(null);
+  const initialCommittedRef = useRef(0);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (isActive) return;
     runningSinceRef.current = null;
+    initialCommittedRef.current = 0;
     setCommittedSeconds(0);
     setIsRunning(false);
     setNowTs(Date.now());
@@ -29,7 +31,9 @@ export function PomodoroTimer({
   useEffect(() => {
     if (!isActive || !taskData?.id) return;
     runningSinceRef.current = null;
-    setCommittedSeconds(Math.max(0, Number(taskData.pomodoro_total_seconds || 0)));
+    const baseSeconds = Math.max(0, Number(taskData.pomodoro_total_seconds || 0));
+    initialCommittedRef.current = baseSeconds;
+    setCommittedSeconds(baseSeconds);
     setIsRunning(false);
     setNowTs(Date.now());
     setSessionVersion((prev) => prev + 1);
@@ -71,9 +75,12 @@ export function PomodoroTimer({
     const committed = Math.max(0, Math.floor(Number(nextSeconds || 0)));
     const startedAt = isRunning ? runningSinceRef.current : null;
     const endedAt = Date.now();
-    const sessionSeconds = isRunning
+    const currentSegmentSeconds = isRunning
       ? Math.max(0, Math.floor((endedAt - Number(startedAt || endedAt)) / 1000))
       : 0;
+    const accumulatedSessionSeconds = Math.max(0, committed - Math.max(0, Number(initialCommittedRef.current || 0)));
+    const sessionSeconds = closeTimer ? accumulatedSessionSeconds : currentSegmentSeconds;
+    const startedAtForStop = closeTimer ? null : startedAt;
     setCommittedSeconds(committed);
     setIsRunning(false);
     runningSinceRef.current = null;
@@ -92,7 +99,7 @@ export function PomodoroTimer({
         totalSeconds: committed,
         progressPercent: getProgressPercent(committed),
         reason: stopReason,
-        startedAt,
+        startedAt: startedAtForStop,
         endedAt,
         sessionSeconds,
       });
