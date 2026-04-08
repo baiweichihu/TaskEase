@@ -87,28 +87,49 @@ function PomodoroManagementModal({
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingHours, setEditingHours] = useState("0");
   const [editingMinutes, setEditingMinutes] = useState("0");
+  
+  // Get today's date in YYYY-MM-DD format for the input
+  const today = new Date();
+  const todayString = today.toISOString().split("T")[0];
+  const [selectedDateInput, setSelectedDateInput] = useState(todayString);
+  
   const textColor = resolvedTheme === "dark" ? "#f8f9fa" : "#2b2b2b";
 
   useEffect(() => {
-    if (isOpen) return;
-    setEditingSessionId(null);
-    setEditingHours("0");
-    setEditingMinutes("0");
+    if (isOpen) {
+      // Reset selected date to today when modal opens
+      const today = new Date();
+      const todayString = today.toISOString().split("T")[0];
+      setSelectedDateInput(todayString);
+    } else {
+      setEditingSessionId(null);
+      setEditingHours("0");
+      setEditingMinutes("0");
+    }
   }, [isOpen]);
 
   // Group sessions by date
   const groupedSessions = useMemo(() => {
+    // Convert selected date input (YYYY-MM-DD) to a comparable date string
+    const selectedDate = new Date(selectedDateInput);
+    const selectedDateKey = selectedDate.toLocaleDateString();
+    
     const groups = {};
     sessions.forEach((session) => {
       const startTime = new Date(session.start_time || "");
       if (!Number.isFinite(startTime.getTime())) return;
       const dateKey = startTime.toLocaleDateString();
+      
+      // Only include sessions from the selected date
+      if (dateKey !== selectedDateKey) return;
+      
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
       groups[dateKey].push(session);
     });
-    // Sort groups by date (newest first) and sort sessions within each group (newest first)
+    
+    // Sort sessions within each group (newest first)
     return Object.keys(groups)
       .sort((a, b) => new Date(b) - new Date(a))
       .map((dateKey) => ({
@@ -117,7 +138,7 @@ function PomodoroManagementModal({
           (a, b) => new Date(b.start_time) - new Date(a.start_time)
         ),
       }));
-  }, [sessions]);
+  }, [sessions, selectedDateInput]);
 
   function formatDuration(totalSeconds) {
     const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds || 0)));
@@ -167,13 +188,38 @@ function PomodoroManagementModal({
             </div>
             <div className="modal-body d-grid gap-3">
               <div className="small" style={{ color: textColor, opacity: 0.78 }}>{t.pomodoroManageHint}</div>
+              
+              {/* Date filter section */}
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                <label style={{ color: textColor, fontSize: "0.9rem", margin: 0, whiteSpace: "nowrap" }}>
+                  {t.pomodoroDateLabel}:
+                </label>
+                <input
+                  type="date"
+                  value={selectedDateInput}
+                  onChange={(e) => setSelectedDateInput(e.target.value)}
+                  style={{
+                    backgroundColor: themeColors.listBg,
+                    borderColor: themeColors.softBtnBorder,
+                    color: textColor,
+                    fontSize: "0.9rem",
+                    padding: "0.5rem",
+                    border: `1px solid ${themeColors.softBtnBorder}`,
+                    borderRadius: "4px",
+                    flex: "1",
+                    maxWidth: "200px",
+                  }}
+                />
+              </div>
 
               {isLoadingSession ? (
                 <div className="text-center">
                   <span className="spinner-border spinner-border-sm" aria-hidden="true" />
                 </div>
-              ) : groupedSessions.length === 0 ? (
+              ) : sessions.length === 0 ? (
                 <div className="small" style={{ color: textColor, opacity: 0.78 }}>{t.pomodoroManageEmpty}</div>
+              ) : groupedSessions.length === 0 ? (
+                <div className="small" style={{ color: textColor, opacity: 0.78 }}>{t.pomodoroNoRecordsForDate}</div>
               ) : (
                 <div className="d-grid gap-3">
                   {groupedSessions.map((group, groupIdx) => (
@@ -566,6 +612,9 @@ const TEXT = {
     pomodoroManageEmpty: "暂无番茄钟记录。",
     pomodoroDuration: "时长",
     pomodoroMinutes: "分钟",
+    pomodoroDateLabel: "日期",
+    pomodoroDateConfirm: "确定",
+    pomodoroNoRecordsForDate: "该日期暂无记录。",
     pomodoroLimitReached: "已达到番茄钟上限 5 小时，计时已强制停止。",
     pomodoroOnlyOne: "只能同时运行一个番茄钟",
     pomodoroRecordUpdated: "番茄钟记录已更新。",
@@ -785,6 +834,9 @@ const TEXT = {
     pomodoroManageEmpty: "暫無番茄鐘記錄。",
     pomodoroDuration: "時長",
     pomodoroMinutes: "分鐘",
+    pomodoroDateLabel: "日期",
+    pomodoroDateConfirm: "確定",
+    pomodoroNoRecordsForDate: "該日期暫無記錄。",
     pomodoroLimitReached: "已達番茄鐘上限 5 小時，計時已強制停止。",
     pomodoroOnlyOne: "只能同時運行一個番茄鐘",
     pomodoroRecordUpdated: "番茄鐘記錄已更新。",
@@ -1005,6 +1057,9 @@ const TEXT = {
     pomodoroManageEmpty: "No Pomodoro records yet.",
     pomodoroDuration: "Duration",
     pomodoroMinutes: "min",
+    pomodoroDateLabel: "Date",
+    pomodoroDateConfirm: "Filter",
+    pomodoroNoRecordsForDate: "No records for this date.",
     pomodoroLimitReached: "Pomodoro hit the 5-hour limit and was stopped automatically.",
     pomodoroOnlyOne: "Only one Pomodoro can run at a time",
     pomodoroRecordUpdated: "Pomodoro record updated.",
@@ -1492,6 +1547,7 @@ export default function App() {
   const [isPomodoroManageOpen, setIsPomodoroManageOpen] = useState(false);
   const [isPomodoroManageSaving, setIsPomodoroManageSaving] = useState(false);
   const [pomodoroSessions, setPomodoroSessions] = useState([]);
+  const [isPomodoroSessionLoading, setIsPomodoroSessionLoading] = useState(false);
   const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -2853,14 +2909,18 @@ export default function App() {
     if (!isPomodoroManageOpen || !user?.id) return;
     let cancelled = false;
 
+    setIsPomodoroSessionLoading(true);
+
     async function refreshSessionsWhenManageOpens() {
       try {
         const sessions = await loadPomodoroSessions(user.id);
         if (cancelled) return;
         setPomodoroSessions(sessions);
+        setIsPomodoroSessionLoading(false);
         pushDiag("pomodoro", "manager_modal_refresh_success", { userId: user.id, count: sessions.length });
       } catch (err) {
         if (cancelled) return;
+        setIsPomodoroSessionLoading(false);
         pushDiag("pomodoro", "manager_modal_refresh_error", { userId: user.id, error: String(err?.message || err) }, "warn");
       }
     }
@@ -2987,6 +3047,7 @@ export default function App() {
     setUsername("");
     setTodos(readLocalTodos(GUEST_KEY));
     setPomodoroSessions([]);
+    setIsPomodoroSessionLoading(false);
     setIsPomodoroManageOpen(false);
     setIsAuthModalOpen(false);
     previousUserIdRef.current = null;
@@ -3610,7 +3671,7 @@ export default function App() {
           onDelete={handleDeletePomodoroRecord}
           isSaving={isPomodoroManageSaving}
           sessions={pomodoroSessions}
-          isLoadingSession={false}
+          isLoadingSession={isPomodoroSessionLoading}
         />
 
         <OtpModal
