@@ -2855,11 +2855,16 @@ export default function App() {
     if (!targetTask) return;
 
     const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
+    const basePomodoroSeconds = Math.max(0, Number(targetTask.pomodoro_total_seconds || 0));
+    const sessionDeltaSeconds = Math.max(0, normalizedSeconds - basePomodoroSeconds);
     const estimatedHours = Number(targetTask.estimated_hours || 0);
     const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
-    const progressFromTimer = estimatedSeconds > 0 ? (normalizedSeconds / estimatedSeconds) * 100 : normalizeProgress(targetTask.progress_percent);
+    const progressFromTimer = estimatedSeconds > 0 ? (sessionDeltaSeconds / estimatedSeconds) * 100 : 0;
     await updateTodo(taskId, {
-      progress_percent: Math.max(normalizeProgress(targetTask.progress_percent), normalizeProgress(progressFromTimer)),
+      progress_percent: Math.min(
+        100,
+        normalizeProgress(targetTask.progress_percent) + normalizeProgress(progressFromTimer),
+      ),
     });
   }
 
@@ -2899,8 +2904,17 @@ export default function App() {
       loadPomodoroTotalsForTodos(user.id, todos),
     ]);
     setPomodoroSessions(sessions);
-    setTodos(refreshed);
-    writeLocalTodos(storageKey, refreshed);
+    setTodos((prev) => {
+      const refreshedById = new Map((Array.isArray(refreshed) ? refreshed : []).map((item) => [String(item.id || ""), item]));
+      const next = (Array.isArray(prev) ? prev : []).map((todo) => {
+        const refreshedTodo = refreshedById.get(String(todo.id || ""));
+        return refreshedTodo
+          ? { ...todo, pomodoro_total_seconds: refreshedTodo.pomodoro_total_seconds }
+          : todo;
+      });
+      writeLocalTodos(storageKey, next);
+      return next;
+    });
     pushDiag("pomodoro", "session_insert_success", { taskId, durationSeconds });
     return true;
   }
