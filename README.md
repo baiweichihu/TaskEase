@@ -13,6 +13,7 @@
 - **多语言支持：** 简体中文 / 繁体中文 / 英文，用户偏好持久化
 - **实时时钟：** 每秒更新的日期时间看板
 - **云端同步：** 本地优先操作，仅在手动/自动同步时与 Supabase 合并
+- **本地优先规则：** 除了点击云同步和自动同步以外，其它操作都只在本地处理，包括番茄钟时长编辑的保存
 - **日历管理：** 点击日期查看当天侧边详情，支持拖拽任务到日期格快速改期
 - **重复任务：** 支持每天 / 每周 / 每月重复，完成后自动生成下一次任务
 - **番茄钟管理：** 设置中可统一管理记录，支持修改时长和删除记录
@@ -55,7 +56,11 @@ npm run preview
    supabase/todos_status_migration.sql      # 任务表迁移 + 新增字段
    supabase/user_preferences.sql            # 用户偏好表创建
    supabase/pomodoro_sessions_migrate_from_todos_and_drop_column.sql  # 迁移旧番茄钟累计列到会话表并删除旧列
+   supabase/todos_progress_percent_constraint_1pct.sql  # 将 progress_percent 约束放宽到 1% 精度
+   supabase/pomodoro_session_tombstones.sql  # 删除标记表，防止多设备删除记录复活
    ```
+
+   说明：数据库约束（CHECK / UNIQUE / FK 等）允许且建议通过 `supabase/*.sql` 迁移脚本调整，不需要改前端代码来“绕过”数据库约束。
 
 2. **配置 Supabase 凭证**
    - 编辑 `src/App.jsx` 中的 `SUPABASE_URL` 和 `SUPABASE_KEY`

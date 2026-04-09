@@ -360,6 +360,7 @@ All major modal dialogs now share a reusable modal container component:
   - Edit and Delete buttons have clear styling with adequate padding
   - Modal triggers a session refresh on open to keep records consistent with the latest timer write
   - Loading spinner displays while sessions are being fetched (fixes race condition where modal appeared empty on first open)
+  - Pomodoro record edits are local-first; only explicit cloud sync and auto sync operations touch Supabase directly
 
 Pomodoro storage model:
 - `pomodoro_sessions`: append-only session-level history and source of truth for timer data.

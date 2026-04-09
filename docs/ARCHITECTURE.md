@@ -177,6 +177,11 @@ const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 | `todos` | Supabase + localStorage | Add/update/delete | Persistent (cloud) |
 | `username` | Memory (derived from user) | Login/logout | Session only |
 
+Local-first rule:
+- Except for manual cloud sync and auto sync, all user actions are handled locally first.
+- This includes Pomodoro session duration edits in the management modal.
+- Supabase is only touched when the app performs an explicit sync operation.
+
 ---
 
 ## Data Flow
@@ -223,6 +228,10 @@ If authenticated:
 Update localStorage cache
 Update UI to reflect new state
 ```
+
+### Local-Only Actions
+
+Pomodoro duration edits, modal interactions, filtering, and other non-sync UI operations should not write to Supabase directly. They update local state first, then wait for an explicit manual sync or the scheduled auto sync to reconcile with the backend.
 
 ### Authentication Flow (Login)
 
@@ -570,7 +579,7 @@ CREATE TABLE public.todos (
     CHECK (repeat_rule IN ('none', 'daily', 'weekly', 'monthly')),
   repeat_until_date DATE,
   progress_percent SMALLINT NOT NULL DEFAULT 0
-    CHECK (progress_percent >= 0 AND progress_percent <= 100 AND MOD(progress_percent, 10) = 0),
+    CHECK (progress_percent >= 0 AND progress_percent <= 100),
   pomodoro_total_seconds INTEGER NOT NULL DEFAULT 0
     CHECK (pomodoro_total_seconds >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -878,6 +887,8 @@ try {
 
 - **Client-side:** Username 3-32 chars, password >= 6 chars, task titles required
 - **Server-side:** Supabase checks constraints (NOT NULL, CHECKs, etc.)
+- **Constraint evolution:** DB constraints are expected to evolve through SQL migrations in `supabase/` (for example, changing `progress_percent` from 10% steps to 1% precision).
+- **Deletion consistency:** Pomodoro session deletions use a tombstone table so other devices can tell the difference between "deleted" and "not synced yet".
 - **SQL injection:** @supabase/supabase-js uses parameterized queries
 
 ### Best Practices

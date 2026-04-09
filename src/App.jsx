@@ -1,20 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { countOccurrencesByRule, getNextRecurringIso, normalizeDateKey } from "./utils/recurrence";
-import {
-  Header,
-  TaskManager,
-  AuthModal,
-  AddTaskModal,
-  PlanWorkModal,
-  ProfileSettingsModal,
-  Toast,
-  ConfirmModal,
-  PomodoroTimer,
-  AboutModal,
-  DataStatsModal,
-  ModalShell,
-} from "./components";
+import { Header } from "./components/Header";
+import { TaskManager } from "./components/TaskManager";
+import { AuthModal } from "./components/AuthModal";
+import { AddTaskModal } from "./components/AddTaskModal";
+import { PlanWorkModal } from "./components/PlanWorkModal";
+import { ProfileSettingsModal } from "./components/ProfileSettingsModal";
+import { Toast } from "./components/Toast";
+import { ConfirmModal } from "./components/ConfirmModal";
+import { PomodoroTimer } from "./components/PomodoroTimer";
+import { AboutModal } from "./components/AboutModal";
+import { DataStatsModal } from "./components/DataStatsModal";
+import { ModalShell } from "./components/ModalShell";
 
 // OTP验证模态框组件
 function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVerify, isVerifyingOtp, pageBg, themeColors }) {
@@ -87,6 +85,7 @@ function PomodoroManagementModal({
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingHours, setEditingHours] = useState("0");
   const [editingMinutes, setEditingMinutes] = useState("0");
+  const [editingSeconds, setEditingSeconds] = useState("0");
   
   // Get today's date in YYYY-MM-DD format for the input
   const today = new Date();
@@ -105,6 +104,7 @@ function PomodoroManagementModal({
       setEditingSessionId(null);
       setEditingHours("0");
       setEditingMinutes("0");
+      setEditingSeconds("0");
     }
   }, [isOpen]);
 
@@ -145,7 +145,10 @@ function PomodoroManagementModal({
     const hours = Math.floor(safeSeconds / 3600);
     const minutes = Math.floor((safeSeconds % 3600) / 60);
     const seconds = safeSeconds % 60;
-    return `${hours}h ${minutes}m ${seconds}s`;
+    if (t.hourUnit === "hours") {
+      return `${hours}h ${minutes}m ${seconds}s`;
+    }
+    return `${hours}${t.durationHourUnit}${minutes}${t.durationMinuteUnit}${seconds}${t.durationSecondUnit}`;
   }
 
   function formatTimeOnly(isoString) {
@@ -158,22 +161,26 @@ function PomodoroManagementModal({
     const totalSeconds = Math.max(0, Number(session.duration_seconds || 0));
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
     setEditingSessionId(session.id);
     setEditingHours(String(hours));
     setEditingMinutes(String(minutes));
+    setEditingSeconds(String(seconds));
   }
 
   async function submitEdit(sessionId) {
     const hourValue = Number(editingHours);
     const minuteValue = Number(editingMinutes);
-    if (!Number.isFinite(hourValue) || !Number.isFinite(minuteValue)) return;
-    const totalSeconds = hourValue * 3600 + minuteValue * 60;
+    const secondValue = Number(editingSeconds);
+    if (!Number.isFinite(hourValue) || !Number.isFinite(minuteValue) || !Number.isFinite(secondValue)) return;
+    const totalSeconds = hourValue * 3600 + minuteValue * 60 + secondValue;
     const safeTotalSeconds = Math.max(0, Math.min(totalSeconds, maxSeconds));
     const ok = await onSave(sessionId, safeTotalSeconds);
     if (ok) {
       setEditingSessionId(null);
       setEditingHours("0");
       setEditingMinutes("0");
+      setEditingSeconds("0");
     }
   }
 
@@ -241,7 +248,7 @@ function PomodoroManagementModal({
                               key={`session-${session.id}`}
                               style={{
                                 display: "grid",
-                                gridTemplateColumns: "40px 1fr 100px 80px 1fr",
+                                gridTemplateColumns: "40px 1fr 100px minmax(260px, 1fr) 1fr",
                                 gap: "1rem",
                                 alignItems: "center",
                                 paddingBottom: "1rem",
@@ -266,7 +273,7 @@ function PomodoroManagementModal({
 
                               {/* Duration */}
                               {isEditing ? (
-                                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "nowrap", whiteSpace: "nowrap" }}>
                                   <input
                                     type="number"
                                     className="form-control"
@@ -284,7 +291,7 @@ function PomodoroManagementModal({
                                       width: "45px",
                                     }}
                                   />
-                                  <span style={{ fontSize: "0.85rem", color: textColor }}>h</span>
+                                  <span style={{ fontSize: "0.85rem", color: textColor, flex: "0 0 auto" }}>{t.durationHourUnit}</span>
                                   <input
                                     type="number"
                                     className="form-control"
@@ -302,10 +309,28 @@ function PomodoroManagementModal({
                                       width: "45px",
                                     }}
                                   />
-                                  <span style={{ fontSize: "0.85rem", color: textColor }}>{t.pomodoroMinutes}</span>
+                                  <span style={{ fontSize: "0.85rem", color: textColor, flex: "0 0 auto" }}>{t.durationMinuteUnit}</span>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    min={0}
+                                    max={59}
+                                    step={1}
+                                    value={editingSeconds}
+                                    onChange={(e) => setEditingSeconds(e.target.value)}
+                                    style={{
+                                      backgroundColor: themeColors.listBg,
+                                      borderColor: themeColors.softBtnBorder,
+                                      color: textColor,
+                                      fontSize: "0.85rem",
+                                      padding: "0.25rem 0.5rem",
+                                      width: "45px",
+                                    }}
+                                  />
+                                  <span style={{ fontSize: "0.85rem", color: textColor, flex: "0 0 auto" }}>{t.durationSecondUnit}</span>
                                 </div>
                               ) : (
-                                <div style={{ color: textColor, fontSize: "0.9rem" }}>
+                                <div style={{ color: textColor, fontSize: "0.9rem", whiteSpace: "nowrap" }}>
                                   {formatDuration(session.duration_seconds)}
                                 </div>
                               )}
@@ -411,6 +436,7 @@ const TODO_TABLE = "todos";
 const PROFILE_TABLE = "profiles";
 const PREFERENCES_TABLE = "user_preferences";
 const POMODORO_SESSIONS_TABLE = "pomodoro_sessions";
+const POMODORO_SESSION_TOMBSTONES_TABLE = "pomodoro_session_tombstones";
 const POMODORO_MAX_SECONDS = 5 * 3600;
 
 const STATUS_PENDING = "pending";
@@ -422,6 +448,8 @@ const GUEST_KEY = "taskease_todos_guest";
 const THEME_KEY = "taskease_theme_mode";
 const THEME_PRESET_KEY = "taskease_theme_preset";
 const CUSTOM_BG_KEY = "taskease_custom_bg";
+const GUEST_POMODORO_SESSIONS_KEY = "taskease_pomodoro_sessions_guest";
+const GUEST_POMODORO_DELETED_KEY = "taskease_pomodoro_sessions_deleted_guest";
 const LANG_KEY = "taskease_lang";
 const CLOCK_KEY = "taskease_clock_format";
 const AUTO_SYNC_KEY = "taskease_auto_sync_enabled";
@@ -512,6 +540,9 @@ const TEXT = {
     pendingSummary: "您还有",
     pendingSuffix: "个任务待完成，预计",
     hourUnit: "小时",
+    durationHourUnit: "小时",
+    durationMinuteUnit: "分钟",
+    durationSecondUnit: "秒",
     localOnly: "Supabase 未连接，当前仅本地模式。",
     notLoginLocal: "未登录，使用本地模式。",
     syncFallback: "云同步失败，已回退本地。",
@@ -735,6 +766,9 @@ const TEXT = {
     pendingSummary: "您還有",
     pendingSuffix: "個任務待完成，預計",
     hourUnit: "小時",
+    durationHourUnit: "小時",
+    durationMinuteUnit: "分鐘",
+    durationSecondUnit: "秒",
     localOnly: "Supabase 未連線，目前僅本地模式。",
     notLoginLocal: "未登入，使用本地模式。",
     syncFallback: "雲同步失敗，已退回本地。",
@@ -957,6 +991,9 @@ const TEXT = {
     pendingSummary: "You still have",
     pendingSuffix: "tasks pending, estimated",
     hourUnit: "hours",
+    durationHourUnit: "h",
+    durationMinuteUnit: "m",
+    durationSecondUnit: "s",
     localOnly: "Supabase unavailable. Local mode only.",
     notLoginLocal: "Not logged in, using local mode.",
     syncFallback: "Cloud sync failed. Falling back to local.",
@@ -1250,6 +1287,133 @@ function readLocalTodos(key) {
 
 function writeLocalTodos(key, todos) {
   localStorage.setItem(key, JSON.stringify(todos));
+}
+function getPomodoroSessionsStorageKey(userId) {
+  const id = String(userId || "").trim();
+  return id ? `taskease_pomodoro_sessions_${id}` : GUEST_POMODORO_SESSIONS_KEY;
+}
+
+function getPomodoroDeletedStorageKey(userId) {
+  const id = String(userId || "").trim();
+  return id ? `taskease_pomodoro_sessions_deleted_${id}` : GUEST_POMODORO_DELETED_KEY;
+}
+
+function mapPomodoroSession(row) {
+  const durationSeconds = Math.max(0, Number(row?.duration_seconds ?? 0));
+  const startTime = String(row?.start_time || "").trim();
+  const endTime = String(row?.end_time || "").trim();
+  const normalizedId = String(row?.id || "").trim();
+  return {
+    id: normalizedId,
+    task_id: row?.task_id ?? null,
+    task_title: String(row?.task_title || "").trim(),
+    duration_seconds: durationSeconds,
+    start_time: startTime,
+    end_time: endTime,
+    user_id: row?.user_id ?? null,
+    local_dirty: Boolean(row?.local_dirty),
+    local_updated_at: String(row?.local_updated_at || "").trim(),
+  };
+}
+
+function isCloudPomodoroSessionId(value) {
+  const id = String(value || "").trim();
+  return /^\d+$/.test(id);
+}
+
+function readLocalPomodoroSessions(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(mapPomodoroSession)
+      .filter((item) => item && item.id)
+      .sort((a, b) => toTs(b.start_time) - toTs(a.start_time));
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalPomodoroSessions(key, sessions) {
+  localStorage.setItem(key, JSON.stringify(Array.isArray(sessions) ? sessions : []));
+}
+
+function readLocalPomodoroDeletedSessionIds(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((id) => String(id || "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalPomodoroDeletedSessionIds(key, ids) {
+  const uniqueIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean)));
+  localStorage.setItem(key, JSON.stringify(uniqueIds));
+}
+
+async function loadCloudPomodoroTombstoneSessionIds(userId) {
+  if (!supabase || !userId) return [];
+  const { data, error } = await supabase
+    .from(POMODORO_SESSION_TOMBSTONES_TABLE)
+    .select("session_id")
+    .eq("user_id", userId);
+
+  if (error) {
+    return [];
+  }
+
+  return (Array.isArray(data) ? data : [])
+    .map((row) => String(row?.session_id || "").trim())
+    .filter(Boolean);
+}
+
+async function loadPomodoroTombstoneSessionIds(userId) {
+  const localIds = readLocalPomodoroDeletedSessionIds(getPomodoroDeletedStorageKey(userId));
+  const cloudIds = await loadCloudPomodoroTombstoneSessionIds(userId);
+  return Array.from(new Set([...localIds, ...cloudIds]));
+}
+
+function addLocalPomodoroDeletedSessionId(userId, sessionId) {
+  const key = getPomodoroDeletedStorageKey(userId);
+  const next = readLocalPomodoroDeletedSessionIds(key);
+  next.push(String(sessionId || "").trim());
+  writeLocalPomodoroDeletedSessionIds(key, next);
+}
+
+function removeLocalPomodoroDeletedSessionId(userId, sessionId) {
+  const key = getPomodoroDeletedStorageKey(userId);
+  const next = readLocalPomodoroDeletedSessionIds(key).filter((id) => id !== String(sessionId || "").trim());
+  writeLocalPomodoroDeletedSessionIds(key, next);
+}
+
+function buildPomodoroTotalsByTaskId(sessions) {
+  const totals = {};
+  for (const session of Array.isArray(sessions) ? sessions : []) {
+    const taskId = String(session?.task_id || "").trim();
+    if (!taskId) continue;
+    totals[taskId] = Math.max(0, Number(totals[taskId] || 0) + Number(session?.duration_seconds || 0));
+  }
+  return totals;
+}
+
+function applyPomodoroTotalsFromSessions(todoList, sessions) {
+  return applyPomodoroTotals(todoList, buildPomodoroTotalsByTaskId(sessions));
+}
+
+function mergePomodoroSessionLists(...lists) {
+  const merged = new Map();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const session of list) {
+      if (!session || !session.id) continue;
+      merged.set(String(session.id), { ...merged.get(String(session.id)), ...session });
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => toTs(b.start_time) - toTs(a.start_time));
 }
 
 function getLastSyncAt(userId) {
@@ -2021,6 +2185,13 @@ export default function App() {
   }
 
   async function loadPomodoroTotalsForTodos(userId, todoList) {
+    const sessionKey = getPomodoroSessionsStorageKey(userId);
+    const tombstoneIds = await loadPomodoroTombstoneSessionIds(userId);
+    const tombstoneSet = new Set((Array.isArray(tombstoneIds) ? tombstoneIds : []).map((id) => String(id || "").trim()).filter(Boolean));
+    const localSessions = readLocalPomodoroSessions(sessionKey).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
+    if (localSessions.length > 0) {
+      return applyPomodoroTotalsFromSessions(todoList, localSessions);
+    }
     if (!supabase || !userId) return Array.isArray(todoList) ? todoList : [];
     const taskIds = (Array.isArray(todoList) ? todoList : [])
       .map((x) => String(x?.id || "").trim())
@@ -2037,17 +2208,12 @@ export default function App() {
 
     if (error) {
       pushDiag("pomodoro", "session_totals_load_failed", { userId, message: String(error.message || "") }, "warn");
-      // Keep current totals instead of wiping UI data when loading session totals fails.
       return Array.isArray(todoList) ? todoList : [];
     }
 
-    const totals = {};
-    for (const row of Array.isArray(data) ? data : []) {
-      const id = String(row?.task_id || "").trim();
-      if (!id) continue;
-      totals[id] = Math.max(0, Number(totals[id] || 0) + Number(row?.duration_seconds || 0));
-    }
-    return applyPomodoroTotals(todoList, totals);
+    const sessions = (Array.isArray(data) ? data : []).map(mapPomodoroSession).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
+    writeLocalPomodoroSessions(sessionKey, sessions);
+    return applyPomodoroTotalsFromSessions(todoList, sessions);
   }
 
   async function migrateLegacyPomodoroTotalsToSessions(userId, todoList) {
@@ -2106,19 +2272,224 @@ export default function App() {
   }
 
   async function loadPomodoroSessions(userId) {
-    if (!supabase || !userId) return [];
-    const { data, error } = await supabase
-      .from(POMODORO_SESSIONS_TABLE)
-      .select("id,task_id,task_title,duration_seconds,start_time,end_time")
-      .eq("user_id", userId)
-      .order("start_time", { ascending: false });
+    const sessionKey = getPomodoroSessionsStorageKey(userId);
+    const localSessions = readLocalPomodoroSessions(sessionKey);
+    if (!supabase || !userId) return localSessions;
+
+    const [{ data, error }, tombstoneIds] = await Promise.all([
+      supabase
+        .from(POMODORO_SESSIONS_TABLE)
+        .select("id,task_id,task_title,duration_seconds,start_time,end_time")
+        .eq("user_id", userId)
+        .order("start_time", { ascending: false }),
+      loadPomodoroTombstoneSessionIds(userId),
+    ]);
 
     if (error) {
       pushDiag("pomodoro", "sessions_load_failed", { userId, message: String(error.message || "") }, "warn");
-      return [];
+      return localSessions;
     }
 
-    return Array.isArray(data) ? data : [];
+    const tombstoneSet = new Set((Array.isArray(tombstoneIds) ? tombstoneIds : []).map((id) => String(id || "").trim()).filter(Boolean));
+    const cloudSessions = (Array.isArray(data) ? data : []).map(mapPomodoroSession).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
+    const mergedSessions = mergePomodoroSessionLists(cloudSessions, localSessions).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
+    writeLocalPomodoroSessions(sessionKey, mergedSessions);
+    return mergedSessions;
+  }
+
+  async function syncLocalPomodoroSessionsToCloud(userId) {
+    if (!supabase || !userId) return true;
+
+    const sessionKey = getPomodoroSessionsStorageKey(userId);
+    const deletedKey = getPomodoroDeletedStorageKey(userId);
+    const localSessions = readLocalPomodoroSessions(sessionKey);
+    const deletedIds = readLocalPomodoroDeletedSessionIds(deletedKey);
+    const cloudTombstoneIds = await loadCloudPomodoroTombstoneSessionIds(userId);
+    const tombstonedIds = new Set([...deletedIds, ...cloudTombstoneIds].map((id) => String(id || "").trim()).filter(Boolean));
+
+    if (localSessions.length === 0 && tombstonedIds.size === 0) {
+      return true;
+    }
+
+    let nextSessions = localSessions.filter((session) => !tombstonedIds.has(String(session.id || "").trim()));
+
+    for (let index = 0; index < nextSessions.length; index += 1) {
+      const session = nextSessions[index];
+      if (!session || !session.task_id) continue;
+
+      const payload = {
+        user_id: userId,
+        task_id: session.task_id,
+        task_title: session.task_title || null,
+        duration_seconds: Math.max(0, Number(session.duration_seconds || 0)),
+        start_time: session.start_time,
+        end_time: session.end_time,
+      };
+
+      if (isCloudPomodoroSessionId(session.id)) {
+        const updateResult = await withTimeout(
+          supabase
+            .from(POMODORO_SESSIONS_TABLE)
+            .update(payload)
+            .eq("user_id", userId)
+            .eq("id", Number(session.id)),
+          OP_TIMEOUT_MS,
+        );
+        if (updateResult?.error) {
+          const msg = String(updateResult.error.message || "").toLowerCase();
+          const blockedByRls = msg.includes("permission") || msg.includes("policy") || msg.includes("row-level");
+          if (!blockedByRls) {
+            throw new Error(updateResult.error.message || "Failed to update Pomodoro session");
+          }
+
+          const deleteResult = await withTimeout(
+            supabase
+              .from(POMODORO_SESSIONS_TABLE)
+              .delete()
+              .eq("user_id", userId)
+              .eq("id", Number(session.id)),
+            OP_TIMEOUT_MS,
+          );
+          if (deleteResult?.error) {
+            throw new Error(deleteResult.error.message || "Failed to replace Pomodoro session");
+          }
+
+          const insertAfterDelete = await withTimeout(
+            supabase
+              .from(POMODORO_SESSIONS_TABLE)
+              .insert(payload)
+              .select("id")
+              .single(),
+            OP_TIMEOUT_MS,
+          );
+          if (insertAfterDelete?.error || !insertAfterDelete?.data?.id) {
+            throw new Error(insertAfterDelete?.error?.message || "Failed to recreate Pomodoro session");
+          }
+
+          nextSessions[index] = {
+            ...session,
+            id: String(insertAfterDelete.data.id),
+            user_id: userId,
+            local_dirty: false,
+          };
+          continue;
+        }
+        nextSessions[index] = { ...session, local_dirty: false };
+        continue;
+      }
+
+      let lookupQuery = supabase
+        .from(POMODORO_SESSIONS_TABLE)
+        .select("id")
+        .eq("user_id", userId)
+        .eq("start_time", session.start_time)
+        .limit(1);
+
+      if (session.task_id) {
+        lookupQuery = lookupQuery.eq("task_id", session.task_id);
+      } else {
+        lookupQuery = lookupQuery.is("task_id", null);
+      }
+
+      const existingResult = await withTimeout(lookupQuery.maybeSingle(), OP_TIMEOUT_MS);
+      if (existingResult?.error) {
+        throw new Error(existingResult.error.message || "Failed to lookup Pomodoro session");
+      }
+
+      if (existingResult?.data?.id) {
+        const updateExistingResult = await withTimeout(
+          supabase
+            .from(POMODORO_SESSIONS_TABLE)
+            .update(payload)
+            .eq("user_id", userId)
+            .eq("id", Number(existingResult.data.id)),
+          OP_TIMEOUT_MS,
+        );
+        if (updateExistingResult?.error) {
+          throw new Error(updateExistingResult.error.message || "Failed to update existing Pomodoro session");
+        }
+
+        nextSessions[index] = {
+          ...session,
+          id: String(existingResult.data.id),
+          user_id: userId,
+          local_dirty: false,
+        };
+        continue;
+      }
+
+      const insertResult = await withTimeout(
+        supabase
+          .from(POMODORO_SESSIONS_TABLE)
+          .insert(payload)
+          .select("id")
+          .single(),
+        OP_TIMEOUT_MS,
+      );
+
+      if (insertResult?.error || !insertResult?.data?.id) {
+        throw new Error(insertResult?.error?.message || "Failed to insert Pomodoro session");
+      }
+
+      nextSessions[index] = {
+        ...session,
+        id: String(insertResult.data.id),
+        user_id: userId,
+        local_dirty: false,
+      };
+    }
+
+    if (deletedIds.length > 0) {
+      const cloudDeletedIds = deletedIds.filter((id) => isCloudPomodoroSessionId(id)).map((id) => Number(id));
+
+      if (cloudDeletedIds.length > 0) {
+        const tombstoneRows = cloudDeletedIds.map((sessionId) => ({
+          user_id: userId,
+          session_id: sessionId,
+          deleted_at: new Date().toISOString(),
+        }));
+
+        const tombstoneResult = await withTimeout(
+          supabase
+            .from(POMODORO_SESSION_TOMBSTONES_TABLE)
+            .upsert(tombstoneRows, { onConflict: "user_id,session_id" }),
+          OP_TIMEOUT_MS,
+        );
+
+        if (tombstoneResult?.error) {
+          throw new Error(tombstoneResult.error.message || "Failed to insert Pomodoro tombstones");
+        }
+
+        const deleteResult = await withTimeout(
+          supabase
+            .from(POMODORO_SESSIONS_TABLE)
+            .delete()
+            .eq("user_id", userId)
+            .in("id", cloudDeletedIds),
+          OP_TIMEOUT_MS,
+        );
+        if (deleteResult?.error) {
+          throw new Error(deleteResult.error.message || "Failed to delete Pomodoro sessions from cloud");
+        }
+      }
+
+      writeLocalPomodoroDeletedSessionIds(deletedKey, []);
+      const deletedSet = new Set(deletedIds.map((id) => String(id || "").trim()));
+      nextSessions = nextSessions.filter((session) => !deletedSet.has(String(session?.id || "").trim()));
+    }
+
+    writeLocalPomodoroSessions(sessionKey, nextSessions);
+    setPomodoroSessions(nextSessions);
+
+    if (deletedIds.length > 0 || tombstonedIds.size > 0) {
+      setTodos((prev) => {
+        const next = applyPomodoroTotalsFromSessions(prev, nextSessions);
+        writeLocalTodos(storageKey, next);
+        return next;
+      });
+    }
+
+    return true;
   }
 
   async function loadPreferences(userId) {
@@ -2834,19 +3205,43 @@ export default function App() {
     });
   }
 
-  function handleTimerSessionChange(nextSession) {
-    setTimerSession((prev) => ({
-      ...prev,
-      ...nextSession,
-    }));
-  }
+  const handleTimerSessionChange = useCallback((nextSession) => {
+    setTimerSession((prev) => {
+      const next = {
+        ...prev,
+        ...nextSession,
+      };
+      if (
+        prev.taskId === next.taskId &&
+        prev.totalSeconds === next.totalSeconds &&
+        prev.displaySeconds === next.displaySeconds &&
+        prev.isRunning === next.isRunning &&
+        prev.startedAt === next.startedAt
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
 
   async function handleTimerSessionPersist(nextSession) {
     if (!nextSession?.taskId) return;
-    setTimerSession((prev) => ({
-      ...prev,
-      ...nextSession,
-    }));
+    setTimerSession((prev) => {
+      const next = {
+        ...prev,
+        ...nextSession,
+      };
+      if (
+        prev.taskId === next.taskId &&
+        prev.totalSeconds === next.totalSeconds &&
+        prev.displaySeconds === next.displaySeconds &&
+        prev.isRunning === next.isRunning &&
+        prev.startedAt === next.startedAt
+      ) {
+        return prev;
+      }
+      return next;
+    });
     await persistPomodoroSession(nextSession.taskId, nextSession.totalSeconds);
   }
 
@@ -2869,11 +3264,11 @@ export default function App() {
   }
 
   async function persistPomodoroSessionRecord({ taskId, startedAt, endedAt, sessionSeconds }) {
-    if (!supabase || !user?.id) return false;
     if (!taskId) return false;
     const durationSeconds = Math.max(0, Math.floor(Number(sessionSeconds || 0)));
     if (durationSeconds <= 0) return false;
 
+    const sessionKey = getPomodoroSessionsStorageKey(user?.id);
     const targetTask = todos.find((item) => item.id === taskId);
     const startTs = Number(startedAt || 0);
     const endTs = Number(endedAt || 0);
@@ -2881,41 +3276,29 @@ export default function App() {
     const safeStartTs = Number.isFinite(startTs) && startTs > 0
       ? Math.min(startTs, safeEndTs)
       : safeEndTs - durationSeconds * 1000;
+    const nextSession = {
+      id: crypto.randomUUID(),
+      user_id: user?.id || null,
+      task_id: taskId,
+      task_title: String(targetTask?.title || "").trim() || null,
+      duration_seconds: durationSeconds,
+      start_time: new Date(safeStartTs).toISOString(),
+      end_time: new Date(safeEndTs).toISOString(),
+      local_dirty: true,
+      local_updated_at: new Date().toISOString(),
+    };
 
-    const { error } = await withTimeout(
-      supabase.from(POMODORO_SESSIONS_TABLE).insert({
-        user_id: user.id,
-        task_id: taskId,
-        task_title: String(targetTask?.title || "").trim() || null,
-        duration_seconds: durationSeconds,
-        start_time: new Date(safeStartTs).toISOString(),
-        end_time: new Date(safeEndTs).toISOString(),
-      }),
-      OP_TIMEOUT_MS,
-    );
-
-    if (error) {
-      pushDiag("pomodoro", "session_insert_failed", { taskId, message: String(error.message || "") }, "warn");
-      return false;
-    }
-
-    const [sessions, refreshed] = await Promise.all([
-      loadPomodoroSessions(user.id),
-      loadPomodoroTotalsForTodos(user.id, todos),
-    ]);
+    const sessions = [nextSession, ...readLocalPomodoroSessions(sessionKey)];
+    writeLocalPomodoroSessions(sessionKey, sessions);
+    removeLocalPomodoroDeletedSessionId(user?.id, nextSession.id);
     setPomodoroSessions(sessions);
+
     setTodos((prev) => {
-      const refreshedById = new Map((Array.isArray(refreshed) ? refreshed : []).map((item) => [String(item.id || ""), item]));
-      const next = (Array.isArray(prev) ? prev : []).map((todo) => {
-        const refreshedTodo = refreshedById.get(String(todo.id || ""));
-        return refreshedTodo
-          ? { ...todo, pomodoro_total_seconds: refreshedTodo.pomodoro_total_seconds }
-          : todo;
-      });
+      const next = applyPomodoroTotalsFromSessions(prev, sessions);
       writeLocalTodos(storageKey, next);
       return next;
     });
-    pushDiag("pomodoro", "session_insert_success", { taskId, durationSeconds });
+    pushDiag("pomodoro", "session_insert_local_success", { taskId, durationSeconds });
     return true;
   }
 
@@ -2970,39 +3353,31 @@ export default function App() {
     setIsPomodoroManageSaving(true);
     try {
       const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
+      const sessionKey = getPomodoroSessionsStorageKey(user?.id);
+      const currentSessions = readLocalPomodoroSessions(sessionKey);
+      const sessionToUpdate = currentSessions.find((s) => s.id === sessionId);
+      if (!sessionToUpdate) return false;
 
-      if (supabase && user?.id) {
-        // Find the session to get task_id and start_time
-        const sessionToUpdate = pomodoroSessions.find((s) => s.id === sessionId);
-        if (!sessionToUpdate) {
-          notify(t.syncFailed, true);
-          return false;
-        }
-
-        // Update the session with new duration
-        const updateResult = await withTimeout(
-          supabase
-            .from(POMODORO_SESSIONS_TABLE)
-            .update({
+      const updatedSessions = currentSessions.map((session) =>
+        session.id === sessionId
+          ? {
+              ...session,
               duration_seconds: normalizedSeconds,
-              end_time: new Date(new Date(sessionToUpdate.start_time).getTime() + normalizedSeconds * 1000).toISOString(),
-            })
-            .eq("id", sessionId),
-          OP_TIMEOUT_MS,
-        );
+              end_time: new Date(new Date(session.start_time).getTime() + normalizedSeconds * 1000).toISOString(),
+              local_dirty: true,
+              local_updated_at: new Date().toISOString(),
+            }
+          : session,
+      );
 
-        if (updateResult?.error) {
-          notify(`${t.syncFailed}: ${String(updateResult.error.message || updateResult.error)}`, true);
-          return false;
-        }
-
-        // Refresh sessions and todos
-        const sessions = await loadPomodoroSessions(user.id);
-        setPomodoroSessions(sessions);
-        const refreshed = await loadPomodoroTotalsForTodos(user.id, todos);
-        setTodos(refreshed);
-        writeLocalTodos(storageKey, refreshed);
-      }
+      writeLocalPomodoroSessions(sessionKey, updatedSessions);
+      removeLocalPomodoroDeletedSessionId(user?.id, sessionId);
+      setPomodoroSessions(updatedSessions);
+      setTodos((prev) => {
+        const next = applyPomodoroTotalsFromSessions(prev, updatedSessions);
+        writeLocalTodos(storageKey, next);
+        return next;
+      });
       notify(t.pomodoroRecordUpdated, false);
       return true;
     } finally {
@@ -3014,25 +3389,22 @@ export default function App() {
     if (!sessionId) return false;
     setIsPomodoroManageSaving(true);
     try {
-      if (supabase && user?.id) {
-        const { error } = await withTimeout(
-          supabase
-            .from(POMODORO_SESSIONS_TABLE)
-            .delete()
-            .eq("id", sessionId),
-          OP_TIMEOUT_MS,
-        );
-        if (error) {
-          notify(`${t.syncFailed}: ${String(error.message || error)}`, true);
-          return false;
-        }
-        // Refresh sessions and todos
-        const sessions = await loadPomodoroSessions(user.id);
-        setPomodoroSessions(sessions);
-        const refreshed = await loadPomodoroTotalsForTodos(user.id, todos);
-        setTodos(refreshed);
-        writeLocalTodos(storageKey, refreshed);
+      const sessionKey = getPomodoroSessionsStorageKey(user?.id);
+      const currentSessions = readLocalPomodoroSessions(sessionKey);
+      const updatedSessions = currentSessions.filter((session) => session.id !== sessionId);
+
+      if (updatedSessions.length === currentSessions.length) return false;
+
+      writeLocalPomodoroSessions(sessionKey, updatedSessions);
+      if (isCloudPomodoroSessionId(sessionId)) {
+        addLocalPomodoroDeletedSessionId(user?.id, sessionId);
       }
+      setPomodoroSessions(updatedSessions);
+      setTodos((prev) => {
+        const next = applyPomodoroTotalsFromSessions(prev, updatedSessions);
+        writeLocalTodos(storageKey, next);
+        return next;
+      });
       notify(t.pomodoroRecordDeleted, false);
       return true;
     } finally {
@@ -3269,25 +3641,27 @@ export default function App() {
           user_id: user.id,
         }));
 
-        const toLegacyRows = () => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
+        const toLegacyRows = (rows) => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
         const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
+        let useRepeatFields = shouldSendRepeatFields;
 
         let upsertResult = await withLockRetry(
           () => withTimeout(
-            supabase.from(TODO_TABLE).upsert(shouldSendRepeatFields ? rows : toLegacyRows(), { onConflict: "id" }),
+            supabase.from(TODO_TABLE).upsert(useRepeatFields ? rows : toLegacyRows(rows), { onConflict: "id" }),
             OP_TIMEOUT_MS,
           ),
         );
 
-        if (upsertResult?.error && shouldSendRepeatFields && String(upsertResult.error.message || "").toLowerCase().includes("repeat_rule")) {
+        if (upsertResult?.error && useRepeatFields && String(upsertResult.error.message || "").toLowerCase().includes("repeat_rule")) {
           repeatColumnsSupportedRef.current = false;
+          useRepeatFields = false;
           upsertResult = await withLockRetry(
             () => withTimeout(
-              supabase.from(TODO_TABLE).upsert(toLegacyRows(), { onConflict: "id" }),
+              supabase.from(TODO_TABLE).upsert(toLegacyRows(rows), { onConflict: "id" }),
               OP_TIMEOUT_MS,
             ),
           );
-        } else if (!upsertResult?.error && shouldSendRepeatFields) {
+        } else if (!upsertResult?.error && useRepeatFields) {
           repeatColumnsSupportedRef.current = true;
         }
 
@@ -3295,6 +3669,8 @@ export default function App() {
           throw new Error(upsertResult.error.message || "Failed to upsert local changes to cloud");
         }
       }
+
+      await syncLocalPomodoroSessionsToCloud(user.id);
 
       const cloudTodos = await withLockRetry(() => withTimeout(loadTodosForUser(user.id, { includeLocal: false }), OP_TIMEOUT_MS));
       const localUnsynced = localTodos.filter((x) => {
@@ -3386,21 +3762,23 @@ export default function App() {
           user_id: user.id,
         }));
 
-        const toLegacyRows = () => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
+        const toLegacyRows = (rows) => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
         const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
+        let useRepeatFields = shouldSendRepeatFields;
 
         let { error } = await withTimeout(
-          supabase.from(TODO_TABLE).upsert(shouldSendRepeatFields ? rows : toLegacyRows(), { onConflict: "id" }),
+          supabase.from(TODO_TABLE).upsert(useRepeatFields ? rows : toLegacyRows(rows), { onConflict: "id" }),
           OP_TIMEOUT_MS,
         );
 
-        if (error && shouldSendRepeatFields && String(error.message || "").toLowerCase().includes("repeat_rule")) {
+        if (error && useRepeatFields && String(error.message || "").toLowerCase().includes("repeat_rule")) {
           repeatColumnsSupportedRef.current = false;
+          useRepeatFields = false;
           ({ error } = await withTimeout(
-            supabase.from(TODO_TABLE).upsert(toLegacyRows(), { onConflict: "id" }),
+            supabase.from(TODO_TABLE).upsert(toLegacyRows(rows), { onConflict: "id" }),
             OP_TIMEOUT_MS,
           ));
-        } else if (!error && shouldSendRepeatFields) {
+        } else if (!error && useRepeatFields) {
           repeatColumnsSupportedRef.current = true;
         }
 
