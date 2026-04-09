@@ -429,7 +429,9 @@ export function TaskManager({
     const effectiveProgress = estimatedSeconds > 0
       ? Math.min(100, normalizeProgress(todo.progress_percent) + normalizeProgress(timerProgressPercent))
       : normalizeProgress(todo.progress_percent);
-    const remainingHours = estimatedHours > 0 ? Math.max(0, estimatedHours - recordedSeconds / 3600) : null;
+    const remainingHours = estimatedHours > 0
+      ? Math.max(0, estimatedHours * (1 - effectiveProgress / 100))
+      : null;
     const recordedLabel = recordedSeconds > 0 ? `${t.recordedTime || "已计时"}: ${formatTrackedDuration(recordedSeconds)}` : null;
     return (
       <li key={todo.id} className={`list-group-item border-0 border-bottom te-task-row ${rowAnimClass}`} style={{ backgroundColor: listBg }}>
