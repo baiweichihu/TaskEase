@@ -85,11 +85,14 @@ export function PomodoroTimer({
     setIsRunning(false);
     runningSinceRef.current = null;
     setNowTs(Date.now());
-    onPersistSession?.({
-      taskId: taskData.id,
-      totalSeconds: committed,
-      progressPercent: getProgressPercent(committed),
-    });
+    // Only call onPersistSession when NOT closing the timer to avoid duplicate records
+    if (!closeTimer) {
+      onPersistSession?.({
+        taskId: taskData.id,
+        totalSeconds: committed,
+        progressPercent: getProgressPercent(committed),
+      });
+    }
     if (resetTimer) {
       setCommittedSeconds(0);
     }

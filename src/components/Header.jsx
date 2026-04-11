@@ -31,6 +31,7 @@ export function Header({
   logoColor,
   pageBg,
   resolvedTheme,
+  onOpenTaskLabelsModal,
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCustomBgModalOpen, setIsCustomBgModalOpen] = useState(false);
@@ -279,11 +280,20 @@ export function Header({
                     
                     <div className="d-grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
                       <button className="btn btn-sm" type="button" onClick={() => {
+                        onOpenTaskLabelsModal?.();
+                        closeSettings();
+                      }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
+                        {t.manageLabels}
+                      </button>
+                      <button className="btn btn-sm" type="button" onClick={() => {
                         onOpenProfileSettings();
                         closeSettings();
                       }} style={{ backgroundColor: themeColors.softBtn, color: "#2b2b2b", border: `1px solid ${themeColors.softBtnBorder}` }}>
                         {t.profileSettings}
                       </button>
+                    </div>
+                    
+                    <div className="d-grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
                       <button
                         className="btn btn-sm"
                         type="button"
