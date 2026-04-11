@@ -12,6 +12,7 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { PomodoroTimer } from "./components/PomodoroTimer";
 import { AboutModal } from "./components/AboutModal";
 import { DataStatsModal } from "./components/DataStatsModal";
+import { TaskLabelsModal } from "./components/TaskLabelsModal";
 import { ModalShell } from "./components/ModalShell";
 
 // OTP验证模态框组件
@@ -457,8 +458,14 @@ const LAST_SYNC_AT_KEY_PREFIX = "taskease_last_sync_at_";
 const PENDING_USERNAME_KEY_PREFIX = "taskease_pending_username_";
 const USERNAME_CACHE_KEY_PREFIX = "taskease_username_cache_";
 const GUEST_LABELS_KEY = "taskease_task_labels_guest";
+const USER_LABELS_KEY_PREFIX = "taskease_task_labels_";
 const PROJECT_REPO_URL = "https://github.com/baiweichihu/TaskEase";
 const SUPABASE_SINGLETON_KEY = "__taskease_supabase_client__";
+
+function getTaskLabelsStorageKey(userId) {
+  const id = String(userId || "").trim();
+  return id ? `${USER_LABELS_KEY_PREFIX}${id}` : GUEST_LABELS_KEY;
+}
 
 function getThemeColors(preset, tone) {
   const themes = {
@@ -648,6 +655,24 @@ const TEXT = {
     pomodoroNoRecordsForDate: "该日期暂无记录。",
     pomodoroLimitReached: "已达到番茄钟上限 5 小时，计时已强制停止。",
     pomodoroOnlyOne: "只能同时运行一个番茄钟",
+    manageLabels: "管理标签",
+    tagValidationEmpty: "标签不能为空",
+    tagValidationTooLong: "标签长度不能超过20个字符",
+    tagValidationDuplicate: "标签已存在",
+    noLabels: "暂无标签",
+    add: "添加",
+    save: "保存",
+    cancel: "取消",
+    edit: "编辑",
+    delete: "删除",
+    taskLabelsUpdated: "标签已保存",
+    taskLabelDeleted: "标签已删除",
+    taskLabelDeleteInUse: "部分标签仍被任务使用，已保留在标签库",
+    labelDeleteConfirmTitle: "删除被占用标签",
+    labelDeleteConfirmMessagePrefix: "标签",
+    labelDeleteConfirmMessageSuffix: "正在被部分任务使用。继续删除将清空这些任务的标签字段，任务本身不会删除。",
+    labelDeleteConfirmUsageCount: "当前占用任务数：{count}",
+    labelDeleteConfirmContinue: "继续删除",
     pomodoroRecordUpdated: "番茄钟记录已更新。",
     pomodoroRecordDeleted: "番茄钟记录已删除。",
     statsDescription: "累计已完成的任务统计。最近一周基于过去7天内完成的任务。",
@@ -875,6 +900,24 @@ const TEXT = {
     pomodoroOnlyOne: "只能同時運行一個番茄鐘",
     pomodoroRecordUpdated: "番茄鐘記錄已更新。",
     pomodoroRecordDeleted: "番茄鐘記錄已刪除。",
+    manageLabels: "管理標籤",
+    tagValidationEmpty: "標籤不能為空",
+    tagValidationTooLong: "標籤長度不能超過20個字符",
+    tagValidationDuplicate: "標籤已存在",
+    noLabels: "暫無標籤",
+    add: "新增",
+    save: "儲存",
+    cancel: "取消",
+    edit: "編輯",
+    delete: "刪除",
+    taskLabelsUpdated: "標籤已儲存",
+    taskLabelDeleted: "標籤已刪除",
+    taskLabelDeleteInUse: "部分標籤仍被任務使用，已保留在標籤庫",
+    labelDeleteConfirmTitle: "刪除被占用標籤",
+    labelDeleteConfirmMessagePrefix: "標籤",
+    labelDeleteConfirmMessageSuffix: "正在被部分任務使用。繼續刪除將清空這些任務的標籤欄位，任務本身不會刪除。",
+    labelDeleteConfirmUsageCount: "目前占用任務數：{count}",
+    labelDeleteConfirmContinue: "繼續刪除",
     statsDescription: "累計已完成的任務統計。最近一週基於過去7天內完成的任務。",
     recordedTime: "已計時",
     updateEmail: "變更電子郵件",
@@ -1101,6 +1144,24 @@ const TEXT = {
     pomodoroOnlyOne: "Only one Pomodoro can run at a time",
     pomodoroRecordUpdated: "Pomodoro record updated.",
     pomodoroRecordDeleted: "Pomodoro record deleted.",
+    manageLabels: "Manage Labels",
+    tagValidationEmpty: "Label cannot be empty",
+    tagValidationTooLong: "Label length cannot exceed 20 characters",
+    tagValidationDuplicate: "Label already exists",
+    noLabels: "No labels yet",
+    add: "Add",
+    save: "Save",
+    cancel: "Cancel",
+    edit: "Edit",
+    delete: "Delete",
+    taskLabelsUpdated: "Labels saved",
+    taskLabelDeleted: "Label deleted",
+    taskLabelDeleteInUse: "Some labels are still used by tasks and were kept",
+    labelDeleteConfirmTitle: "Delete Label In Use",
+    labelDeleteConfirmMessagePrefix: "Label",
+    labelDeleteConfirmMessageSuffix: "is used by some tasks. Continue will clear this label from those tasks, without deleting task rows.",
+    labelDeleteConfirmUsageCount: "Tasks using this label: {count}",
+    labelDeleteConfirmContinue: "Continue Deletion",
     statsDescription: "Statistics on all completed tasks. This week counts tasks completed in the past 7 days.",
     recordedTime: "Tracked",
     updateEmail: "Change Email",
@@ -1589,6 +1650,27 @@ function parseTaskLabels(raw) {
   return [];
 }
 
+function extractTaskLabelsFromTodos(todoList) {
+  if (!Array.isArray(todoList)) return [];
+  return todoList
+    .map((todo) => String(todo?.label || "").trim())
+    .filter(Boolean);
+}
+
+function mergeTaskLabels(...sources) {
+  const deduped = new Map();
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+    for (const raw of source) {
+      const value = String(raw || "").trim();
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (!deduped.has(key)) deduped.set(key, value);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
 function mapTodo(row) {
   const rawStatus = String(row.status ?? STATUS_PENDING).trim();
   const status = rawStatus === STATUS_DELETED ? STATUS_DELETED : rawStatus;
@@ -1712,6 +1794,8 @@ export default function App() {
   const [isPomodoroManageSaving, setIsPomodoroManageSaving] = useState(false);
   const [pomodoroSessions, setPomodoroSessions] = useState([]);
   const [isPomodoroSessionLoading, setIsPomodoroSessionLoading] = useState(false);
+  const [isTaskLabelsModalOpen, setIsTaskLabelsModalOpen] = useState(false);
+  const [taskLabels, setTaskLabels] = useState([]);
   const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
   const [activeAuthTab, setActiveAuthTab] = useState("login");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1755,9 +1839,10 @@ export default function App() {
 
   const [editingTodoId, setEditingTodoId] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [labelDeleteConfirmOpen, setLabelDeleteConfirmOpen] = useState(false);
+  const [pendingLabelDelete, setPendingLabelDelete] = useState(null);
   const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
   const [pendingDuplicatePayload, setPendingDuplicatePayload] = useState(null);
-  const [taskLabels, setTaskLabels] = useState([]);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const previousUserIdRef = useRef(null);
   const authSyncSeqRef = useRef(0);
@@ -2049,14 +2134,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user) return;
+    const key = getTaskLabelsStorageKey(user?.id);
     try {
-      const raw = localStorage.getItem(GUEST_LABELS_KEY);
-      if (raw) setTaskLabels(parseTaskLabels(JSON.parse(raw)));
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        setTaskLabels([]);
+        return;
+      }
+      setTaskLabels(parseTaskLabels(JSON.parse(raw)));
+    } catch {
+      setTaskLabels([]);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    const labelsFromTodos = extractTaskLabelsFromTodos(todos);
+    if (labelsFromTodos.length === 0) return;
+
+    const merged = mergeTaskLabels(taskLabels, labelsFromTodos)
+      .sort((a, b) => a.localeCompare(b, lang === "en" ? "en-US" : lang));
+
+    const isUnchanged =
+      merged.length === taskLabels.length &&
+      merged.every((label, idx) => label === taskLabels[idx]);
+    if (isUnchanged) return;
+
+    setTaskLabels(merged);
+
+    try {
+      localStorage.setItem(getTaskLabelsStorageKey(user?.id), JSON.stringify(merged));
     } catch {
       /* ignore */
     }
-  }, [user]);
+
+  }, [todos, taskLabels, lang, user?.id, supabase]);
 
   useEffect(() => {
     if (!supabase || !user || !autoSyncEnabled) return;
@@ -2069,6 +2180,15 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [user, autoSyncEnabled]);
 
+  const mergedTaskLabels = useMemo(() => {
+    const fromTodos = todos
+      .filter((x) => x.status !== STATUS_DELETED)
+      .map((x) => String(x.label || "").trim())
+      .filter(Boolean);
+    const set = new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), ...fromTodos]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, lang));
+  }, [todos, taskLabels, lang]);
+
   useEffect(() => {
     if (!supabase || !user?.id) return;
     if (!prefsReadyForAutoSaveRef.current) return;
@@ -2079,14 +2199,13 @@ export default function App() {
         language: lang,
         clock_format: clockFormat,
         theme_mode: themeMode,
-        task_labels: taskLabels,
         auto_sync_enabled: autoSyncEnabled,
         theme_preset: themePreset,
         custom_background: customBackground,
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [user?.id, lang, clockFormat, themeMode, taskLabels, autoSyncEnabled, themePreset, customBackground]);
+  }, [user?.id, lang, clockFormat, themeMode, mergedTaskLabels, autoSyncEnabled, themePreset, customBackground]);
 
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
@@ -2109,15 +2228,6 @@ export default function App() {
     const sum = pendingTodos.reduce((acc, item) => acc + Number(item.estimated_hours || 0), 0);
     return Number.isFinite(sum) ? sum.toFixed(1) : "0.0";
   }, [pendingTodos]);
-
-  const mergedTaskLabels = useMemo(() => {
-    const fromTodos = todos
-      .filter((x) => x.status !== STATUS_DELETED)
-      .map((x) => String(x.label || "").trim())
-      .filter(Boolean);
-    const set = new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), ...fromTodos]);
-    return Array.from(set).sort((a, b) => a.localeCompare(b, lang));
-  }, [todos, taskLabels, lang]);
 
   useEffect(() => {
     if (!labelFilter || labelFilter === LABEL_FILTER_UNLABELED) return;
@@ -2529,7 +2639,13 @@ export default function App() {
       setThemeMode(data.theme_mode);
     }
     if (data.task_labels !== undefined && data.task_labels !== null) {
-      setTaskLabels(parseTaskLabels(data.task_labels));
+      const nextLabels = parseTaskLabels(data.task_labels);
+      setTaskLabels(nextLabels);
+      try {
+        localStorage.setItem(getTaskLabelsStorageKey(userId), JSON.stringify(nextLabels));
+      } catch {
+        /* ignore */
+      }
     }
     if (!hasLocalAutoSync && typeof data.auto_sync_enabled === "boolean") {
       setAutoSyncEnabled(data.auto_sync_enabled);
@@ -2576,6 +2692,86 @@ export default function App() {
       );
       return false;
     }
+  }
+
+  async function saveTaskLabels(userId, labels) {
+    try {
+      const normalizedLabels = Array.isArray(labels)
+        ? labels.map((l) => String(l || "").trim()).filter(Boolean)
+        : [];
+      const labelsFromTodos = extractTaskLabelsFromTodos(todos.filter((x) => x.status !== STATUS_DELETED));
+      const mergedLabels = mergeTaskLabels(normalizedLabels, labelsFromTodos)
+        .sort((a, b) => a.localeCompare(b, lang === "en" ? "en-US" : lang));
+
+      setTaskLabels(mergedLabels);
+      try {
+        localStorage.setItem(getTaskLabelsStorageKey(userId), JSON.stringify(mergedLabels));
+      } catch {
+        /* ignore */
+      }
+      notify(t.taskLabelsUpdated || "标签已保存", false);
+      return true;
+    } catch (error) {
+      pushDiag("labels", "save_error", { userId, error: String(error?.message || error) }, "warn");
+      notify(String(error?.message || "无法保存标签"), true);
+      return false;
+    }
+  }
+
+  function getLabelKey(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function removeLabelFromTodosAndLibrary(label) {
+    const key = getLabelKey(label);
+    if (!key) return;
+    const nowIso = new Date().toISOString();
+
+    setTodos((prev) => {
+      const next = (Array.isArray(prev) ? prev : []).map((todo) => {
+        if (!todo || todo.status === STATUS_DELETED) return todo;
+        if (getLabelKey(todo.label) !== key) return todo;
+        return {
+          ...todo,
+          label: "",
+          local_dirty: true,
+          local_updated_at: nowIso,
+        };
+      });
+      writeLocalTodos(storageKey, next);
+      return next;
+    });
+
+    const nextLabels = taskLabels.filter((x) => getLabelKey(x) !== key);
+    setTaskLabels(nextLabels);
+    try {
+      localStorage.setItem(getTaskLabelsStorageKey(user?.id), JSON.stringify(nextLabels));
+    } catch {
+      /* ignore */
+    }
+
+    setDraft((prev) => (getLabelKey(prev?.label) === key ? { ...prev, label: "" } : prev));
+    notify(t.taskLabelDeleted || "标签已删除", false);
+  }
+
+  function handleRequestDeleteTaskLabel(label) {
+    const key = getLabelKey(label);
+    if (!key) return;
+    const inUseCount = todos.filter((todo) => todo?.status !== STATUS_DELETED && getLabelKey(todo?.label) === key).length;
+    if (inUseCount > 0) {
+      setPendingLabelDelete({ label: String(label || "").trim(), inUseCount });
+      setLabelDeleteConfirmOpen(true);
+      return;
+    }
+    removeLabelFromTodosAndLibrary(label);
+  }
+
+  function confirmDeleteTaskLabelInUse() {
+    const label = String(pendingLabelDelete?.label || "").trim();
+    if (!label) return;
+    removeLabelFromTodosAndLibrary(label);
+    setLabelDeleteConfirmOpen(false);
+    setPendingLabelDelete(null);
   }
 
   async function loadOrCreateUsername(currentUser) {
@@ -2679,16 +2875,12 @@ export default function App() {
   function handleAddLabelToLibrary(tag) {
     const trimmed = String(tag || "").trim();
     if (!trimmed) return;
-    const next = Array.from(new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), trimmed])).sort((a, b) =>
-      a.localeCompare(b, lang),
-    );
+    const next = mergeTaskLabels(taskLabels, [trimmed]).sort((a, b) => a.localeCompare(b, lang === "en" ? "en-US" : lang));
     setTaskLabels(next);
-    if (!user) {
-      try {
-        localStorage.setItem(GUEST_LABELS_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+    try {
+      localStorage.setItem(getTaskLabelsStorageKey(user?.id), JSON.stringify(next));
+    } catch {
+      /* ignore */
     }
     setDraft((p) => ({ ...p, label: trimmed }));
   }
@@ -3270,25 +3462,42 @@ export default function App() {
 
     const sessionKey = getPomodoroSessionsStorageKey(user?.id);
     const targetTask = todos.find((item) => item.id === taskId);
-    const startTs = Number(startedAt || 0);
-    const endTs = Number(endedAt || 0);
-    const safeEndTs = Number.isFinite(endTs) && endTs > 0 ? endTs : Date.now();
-    const safeStartTs = Number.isFinite(startTs) && startTs > 0
-      ? Math.min(startTs, safeEndTs)
-      : safeEndTs - durationSeconds * 1000;
+    
+    // Use precise timestamps, with endedAt as primary reference
+    const endTs = Number.isFinite(Number(endedAt)) ? Number(endedAt) : Date.now();
+    // Calculate startTs based on endTs and duration for consistency
+    const startTs = endTs - (durationSeconds * 1000);
+    
+    // Round to nearest second for consistency in database lookups
+    const startTimeMs = Math.round(startTs / 1000) * 1000;
+    const endTimeMs = Math.round(endTs / 1000) * 1000;
+    
     const nextSession = {
       id: crypto.randomUUID(),
       user_id: user?.id || null,
       task_id: taskId,
       task_title: String(targetTask?.title || "").trim() || null,
       duration_seconds: durationSeconds,
-      start_time: new Date(safeStartTs).toISOString(),
-      end_time: new Date(safeEndTs).toISOString(),
+      start_time: new Date(startTimeMs).toISOString(),
+      end_time: new Date(endTimeMs).toISOString(),
       local_dirty: true,
       local_updated_at: new Date().toISOString(),
     };
 
-    const sessions = [nextSession, ...readLocalPomodoroSessions(sessionKey)];
+    // Prevent duplicate sessions: check if a very similar session already exists in local storage
+    const existingSessions = readLocalPomodoroSessions(sessionKey);
+    const isDuplicate = existingSessions.some(session => 
+      session.task_id === taskId && 
+      session.duration_seconds === durationSeconds &&
+      Math.abs(new Date(session.start_time).getTime() - startTimeMs) < 2000 // Within 2 seconds
+    );
+    
+    if (isDuplicate) {
+      pushDiag("pomodoro", "session_duplicate_prevented", { taskId, durationSeconds }, "warn");
+      return false;
+    }
+
+    const sessions = [nextSession, ...existingSessions];
     writeLocalPomodoroSessions(sessionKey, sessions);
     removeLocalPomodoroDeletedSessionId(user?.id, nextSession.id);
     setPomodoroSessions(sessions);
@@ -3338,12 +3547,16 @@ export default function App() {
       setTimerSession({ taskId: null, totalSeconds: 0, displaySeconds: 0, isRunning: false, startedAt: null });
       return;
     }
-    await persistPomodoroSessionRecord({
-      taskId: nextSession.taskId,
-      startedAt: nextSession.startedAt,
-      endedAt: nextSession.endedAt,
-      sessionSeconds: nextSession.sessionSeconds,
-    });
+    
+    // Only persist session record if it has actual duration
+    if (nextSession?.sessionSeconds && nextSession.sessionSeconds > 0) {
+      await persistPomodoroSessionRecord({
+        taskId: nextSession.taskId,
+        startedAt: nextSession.startedAt,
+        endedAt: nextSession.endedAt,
+        sessionSeconds: nextSession.sessionSeconds,
+      });
+    }
     setTimerTaskId(null);
     setTimerSession({ taskId: null, totalSeconds: 0, displaySeconds: 0, isRunning: false, startedAt: null });
   }
@@ -3695,8 +3908,8 @@ export default function App() {
         language: lang,
         clock_format: clockFormat,
         theme_mode: themeMode,
-        task_labels: taskLabels,
         auto_sync_enabled: autoSyncEnabled,
+        ...(source === "manual" ? { task_labels: mergedTaskLabels } : {}),
       });
 
       pushDiag("sync", "success", { source, count: mergedTodos.length });
@@ -3732,7 +3945,6 @@ export default function App() {
       language: lang,
       clock_format: clockFormat,
       theme_mode: themeMode,
-      task_labels: taskLabels,
       auto_sync_enabled: nextEnabled,
     });
     notify(nextEnabled ? t.autoSyncEnabledNotice : t.autoSyncDisabledNotice, false);
@@ -3789,7 +4001,6 @@ export default function App() {
         language: lang,
         clock_format: clockFormat,
         theme_mode: themeMode,
-        task_labels: taskLabels,
         auto_sync_enabled: autoSyncEnabled,
         theme_preset: themePreset,
         custom_background: customBackground,
@@ -3881,6 +4092,7 @@ export default function App() {
             logoColor={logoColor}
             pageBg={pageBg}
             resolvedTheme={resolvedTheme}
+            onOpenTaskLabelsModal={() => setIsTaskLabelsModalOpen(true)}
           />
 
         <TaskManager
@@ -4064,6 +4276,35 @@ export default function App() {
           isSaving={isPomodoroManageSaving}
           sessions={pomodoroSessions}
           isLoadingSession={isPomodoroSessionLoading}
+        />
+
+        <TaskLabelsModal
+          isOpen={isTaskLabelsModalOpen}
+          onClose={() => setIsTaskLabelsModalOpen(false)}
+          t={t}
+          labels={mergedTaskLabels}
+          onLabelsChange={(newLabels) => saveTaskLabels(user?.id, newLabels)}
+          onRequestDeleteLabel={handleRequestDeleteTaskLabel}
+          themeColors={themeColors}
+          pageBg={pageBg}
+          resolvedTheme={resolvedTheme}
+          isCustomBgTheme={isCustomBgTheme}
+        />
+
+        <ConfirmModal
+          isOpen={labelDeleteConfirmOpen}
+          onClose={() => {
+            setLabelDeleteConfirmOpen(false);
+            setPendingLabelDelete(null);
+          }}
+          title={t.labelDeleteConfirmTitle}
+          message={`${t.labelDeleteConfirmMessagePrefix} "${String(pendingLabelDelete?.label || "")}" ${t.labelDeleteConfirmMessageSuffix}\n${String(t.labelDeleteConfirmUsageCount || "Tasks using this label: {count}").replace("{count}", String(Number(pendingLabelDelete?.inUseCount || 0)))}`}
+          confirmLabel={t.labelDeleteConfirmContinue}
+          cancelLabel={t.cancel}
+          closeAriaLabel={t.close}
+          pageBg={pageBg}
+          danger
+          onConfirm={confirmDeleteTaskLabelInUse}
         />
 
         <OtpModal

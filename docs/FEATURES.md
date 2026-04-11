@@ -376,7 +376,41 @@ Pomodoro storage model:
 Schema policy note:
 - For structured feature data, this project prefers explicit database columns and migration scripts over hidden text markers.
 
-### 2.12 Notifications
+#### 2.11.2 Duplicate Session Prevention (April 2026)
+As of 2026-04-11, a fix has been implemented to prevent duplicate Pomodoro session records:
+- **Root Cause:** When closing the timer, both `onPersistSession` and `onStop` callbacks were creating session records, resulting in two nearly-identical records with slight timestamp variations.
+- **Solution:**
+  - Modified `commitSession()` in `PomodoroTimer.jsx`: Only `onStop` callback fires when `closeTimer=true`; `onPersistSession` now only fires for pause/resume (not close).
+  - Enhanced timestamp precision in `persistPomodoroSessionRecord()`: Calculates consistent start/end times using end time + duration formula, rounded to second-level precision.
+  - Added local deduplication: Before inserting into storage, checks for existing sessions with identical task, duration, and start time (±2 second tolerance).
+  - Enhanced sync logic: Improved lookup using start_time and task_id to identify duplicates before cloud insertion.
+
+### 2.12 Task Labels Management
+- **Purpose:** Organize and categorize tasks with custom, user-defined labels (tags).
+- **Access:** Settings menu → **Manage Labels** button (located in Settings modal between "Data Statistics | Pomodoro Manager" and "Profile Settings" sections).
+- **Features:**
+  - ✅ Add new labels with real-time validation:
+    - Non-empty check
+    - Maximum 20 characters
+    - Duplicate prevention (case-insensitive comparison)
+  - ✅ Edit existing labels inline with cancel/save controls
+  - ✅ Delete labels with confirmation styling (red danger button)
+  - ✅ Real-time error messages displayed in alert box
+  - ✅ Keyboard shortcuts: `Enter` to confirm, `Esc` to cancel
+- **Language Support:** Fully localized for Simplified Chinese (简体中文), Traditional Chinese (繁體中文), and English with appropriate UI strings.
+- **Theme Adaptation:** Respects current theme preset (Beige, Pink, Blue, Lavender, Custom Background) and light/dark mode.
+- **Data Storage:**
+  - Labels stored in `user_preferences.task_labels` column as JSON array
+  - Synchronized to cloud on save
+  - Persisted across browser sessions
+- **UI/UX:**
+  - Clear button styling: soft buttons for normal actions, soft primary for add, danger red for delete
+  - Edit mode shows input field with icon buttons (✔ save, ✕ cancel)
+  - Display mode shows label with # prefix and edit/delete buttons
+  - Empty state message when no labels exist
+- **Future Integration:** Labels can be applied to individual tasks in the task form and used for filtering (planned feature).
+
+### 2.13 Notifications
 
 **Toast Bar (Top-fixed Position):**
 - Auto-dismisses after 4.5 seconds
@@ -389,7 +423,7 @@ Schema policy note:
   
 **Implementation:** `notify(msg)` function sets state, schedules auto-dismiss timer
 
-### 2.13 Modals
+### 2.14 Modals
 
 **Auth Modal:**
 - Tabs: Login | Register
