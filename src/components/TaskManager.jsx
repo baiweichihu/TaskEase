@@ -419,16 +419,8 @@ export function TaskManager({
     const rowAnimClass = taskAnimMap[String(todo.id)] || "";
     const baseRecordedSeconds = Math.max(0, Number(todo.pomodoro_total_seconds || 0));
     const recordedSeconds = activeTimerTaskId === todo.id ? activeTimerDisplaySeconds : baseRecordedSeconds;
-    const activeSessionBaseSeconds = Math.max(0, Number(timerSession?.totalSeconds || 0));
-    const activeSessionDeltaSeconds = activeTimerTaskId === todo.id
-      ? Math.max(0, activeTimerDisplaySeconds - activeSessionBaseSeconds)
-      : 0;
     const estimatedHours = Number(todo.estimated_hours || 0);
-    const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
-    const timerProgressPercent = estimatedSeconds > 0 ? (activeSessionDeltaSeconds / estimatedSeconds) * 100 : 0;
-    const effectiveProgress = estimatedSeconds > 0
-      ? Math.min(100, normalizeProgress(todo.progress_percent) + normalizeProgress(timerProgressPercent))
-      : normalizeProgress(todo.progress_percent);
+    const effectiveProgress = normalizeProgress(todo.progress_percent);
     const remainingHours = estimatedHours > 0
       ? Math.max(0, estimatedHours * (1 - effectiveProgress / 100))
       : null;

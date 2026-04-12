@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { countOccurrencesByRule, getNextRecurringIso, normalizeDateKey } from "./utils/recurrence";
+import { applyPomodoroStopProgress } from "./utils/pomodoroProgress";
 import { Header } from "./components/Header";
 import { TaskManager } from "./components/TaskManager";
 import { AuthModal } from "./components/AuthModal";
@@ -3401,7 +3402,7 @@ export default function App() {
     });
   }, []);
 
-  async function handleTimerSessionPersist(nextSession) {
+  function handleTimerSessionPersist(nextSession) {
     if (!nextSession?.taskId) return;
     setTimerSession((prev) => {
       const next = {
@@ -3418,25 +3419,6 @@ export default function App() {
         return prev;
       }
       return next;
-    });
-    await persistPomodoroSession(nextSession.taskId, nextSession.totalSeconds);
-  }
-
-  async function persistPomodoroSession(taskId, totalSeconds) {
-    const targetTask = todos.find((item) => item.id === taskId);
-    if (!targetTask) return;
-
-    const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
-    const basePomodoroSeconds = Math.max(0, Number(targetTask.pomodoro_total_seconds || 0));
-    const sessionDeltaSeconds = Math.max(0, normalizedSeconds - basePomodoroSeconds);
-    const estimatedHours = Number(targetTask.estimated_hours || 0);
-    const estimatedSeconds = estimatedHours > 0 ? estimatedHours * 3600 : 0;
-    const progressFromTimer = estimatedSeconds > 0 ? (sessionDeltaSeconds / estimatedSeconds) * 100 : 0;
-    await updateTodo(taskId, {
-      progress_percent: Math.min(
-        100,
-        normalizeProgress(targetTask.progress_percent) + normalizeProgress(progressFromTimer),
-      ),
     });
   }
 
@@ -3488,7 +3470,28 @@ export default function App() {
     setPomodoroSessions(sessions);
 
     setTodos((prev) => {
-      const next = applyPomodoroTotalsFromSessions(prev, sessions);
+      let next = applyPomodoroTotalsFromSessions(prev, sessions);
+      const taskIndex = next.findIndex((item) => item.id === taskId);
+      if (taskIndex >= 0) {
+        const task = next[taskIndex];
+        const estimatedHours = Number(task?.estimated_hours || 0);
+        const baseProgress = normalizeProgress(task.progress_percent);
+        const nextProgress = applyPomodoroStopProgress(baseProgress, estimatedHours, durationSeconds);
+        if (nextProgress !== baseProgress) {
+          const localUpdateTs = new Date().toISOString();
+          next = next.map((item, index) =>
+            index === taskIndex
+              ? {
+                  ...item,
+                  progress_percent: nextProgress,
+                  local_dirty: true,
+                  local_updated_at: localUpdateTs,
+                }
+              : item,
+          );
+        }
+      }
+
       writeLocalTodos(storageKey, next);
       return next;
     });
