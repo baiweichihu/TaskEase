@@ -36,11 +36,11 @@ export function TaskLabelsModal({
     color: "#721c24",
   };
 
-  const normalizeLabel = (label) => {
+  const normalizeLabel = useCallback((label) => {
     return String(label || "").trim();
-  };
+  }, []);
 
-  const validateLabel = (label) => {
+  const validateLabel = useCallback((label) => {
     const normalized = normalizeLabel(label);
     if (!normalized) {
       setErrorMessage(t.tagValidationEmpty || "标签不能为空");
@@ -61,7 +61,7 @@ export function TaskLabelsModal({
       return false;
     }
     return true;
-  };
+  }, [editingIndex, labels, normalizeLabel, t.tagValidationDuplicate, t.tagValidationEmpty, t.tagValidationTooLong]);
 
   const handleAddLabel = useCallback(() => {
     if (!validateLabel(newLabelInput)) return;
@@ -70,7 +70,7 @@ export function TaskLabelsModal({
     onLabelsChange?.(updatedLabels);
     setNewLabelInput("");
     setErrorMessage("");
-  }, [newLabelInput, labels, onLabelsChange]);
+  }, [newLabelInput, labels, onLabelsChange, normalizeLabel, validateLabel]);
 
   const handleStartEdit = useCallback((index) => {
     setEditingIndex(index);
@@ -89,7 +89,7 @@ export function TaskLabelsModal({
     setEditingIndex(null);
     setEditingValue("");
     setErrorMessage("");
-  }, [editingIndex, editingValue, labels, onLabelsChange]);
+  }, [editingIndex, editingValue, labels, onLabelsChange, normalizeLabel, validateLabel]);
 
   const handleDeleteLabel = useCallback((index) => {
     const label = labels[index] || "";

@@ -602,8 +602,8 @@ const TEXT = {
     planHoursPlaceholder: "例如：2.5",
     planGenerate: "生成建议",
     planInvalidHours: "请输入大于 0 的可用时长（小时）。",
-    planNoActiveTasks: "没有可参与自动规划的任务：请至少在「预计小时」「截止时间」「优先级」中填写一项。",
-    planSummary: "仅包含至少填写了预计时长、截止或优先级之一的进行中任务；已按截止时间、优先级与（或推测的）工时排序，建议如下：",
+    planNoActiveTasks: "没有可参与自动规划的任务：请先填写预计小时。",
+    planSummary: "仅包含已填写预计时长的进行中任务；已按截止时间与优先级排序，建议如下：",
     planNothingPacked: "未能安排任何任务，请检查可用时长或任务列表。",
     planSuggestWork: "建议投入",
     planFullEstimate: "预计总需",
@@ -614,7 +614,7 @@ const TEXT = {
     editTask: "编辑任务",
     saveChanges: "保存",
     addTaskHintTitle: "添加任务规则说明",
-    addTaskHint: "· 标题为必填项。\n· 预计小时、截止时间、优先级均为选填。\n· 若以上三项全部留空，自动规划不会纳入该任务。\n· 仅填部分字段时，规划会结合已有信息并推测所需工时。",
+    addTaskHint: "· 标题为必填项。\n· 预计小时、截止时间、优先级均为选填。\n· 自动规划仅会纳入已填写预计小时的任务。\n· 截止时间和优先级会影响自动规划里的排序。",
     tagAddNew: "＋新增",
     newTagPrompt: "新标签名称",
     tagNone: "无",
@@ -633,7 +633,7 @@ const TEXT = {
     tagModalConfirm: "添加",
     planAlgorithmAria: "自动规划算法说明",
     planAlgorithmHint:
-      "算法步骤：\n1. 只纳入「进行中」且预计时长、截止时间、优先级至少填写过一项的任务。\n2. 按截止时间从早到晚排序；无截止时间排在后面；同一截止时间内按优先级数字从大到小。\n3. 若未填预计时长，根据是否填写截止、优先级推测所需工时。\n4. 按上述顺序将任务依次装入你输入的可用时长，直至时间用完或没有可装任务。",
+      "算法步骤：\n1. 只纳入「进行中」且已填写预计时长的任务。\n2. 按截止时间从早到晚排序；无截止时间排在后面；同一截止时间内按优先级数字从小到大，0（未指定）放最后。\n3. 直接使用任务里填写的预计时长，不再推测工时。\n4. 按上述顺序将任务依次装入你输入的可用时长，直至时间用完或没有可装任务。",
     profileSettings: "个人资料设置",
     emailBoundLabel: "已绑定邮箱",
     dataStats: "数据统计",
@@ -660,11 +660,6 @@ const TEXT = {
     tagValidationTooLong: "标签长度不能超过20个字符",
     tagValidationDuplicate: "标签已存在",
     noLabels: "暂无标签",
-    add: "添加",
-    save: "保存",
-    cancel: "取消",
-    edit: "编辑",
-    delete: "删除",
     taskLabelsUpdated: "标签已保存",
     taskLabelDeleted: "标签已删除",
     taskLabelDeleteInUse: "部分标签仍被任务使用，已保留在标签库",
@@ -846,8 +841,8 @@ const TEXT = {
     planHoursPlaceholder: "例如：2.5",
     planGenerate: "產生建議",
     planInvalidHours: "請輸入大於 0 的可用時長（小時）。",
-    planNoActiveTasks: "沒有可參與自動規劃的任務：請至少在「預計小時」「截止時間」「優先級」中填寫一項。",
-    planSummary: "僅包含至少填寫了預計時長、截止或優先級之一的進行中任務；已依截止時間、優先級與（或推測的）工時排序，建議如下：",
+    planNoActiveTasks: "沒有可參與自動規劃的任務：請先填寫預計小時。",
+    planSummary: "僅包含已填寫預計時長的進行中任務；已依截止時間與優先級排序，建議如下：",
     planNothingPacked: "未能安排任何任務，請檢查可用時長或任務列表。",
     planSuggestWork: "建議投入",
     planFullEstimate: "預計總需",
@@ -858,7 +853,7 @@ const TEXT = {
     editTask: "編輯任務",
     saveChanges: "儲存",
     addTaskHintTitle: "新增任務規則說明",
-    addTaskHint: "· 標題為必填。\n· 預計小時、截止時間、優先級皆為選填。\n· 若以上三項全部留空，自動規劃不會納入該任務。\n· 僅填部分欄位時，規劃會結合已有資訊並推測所需工時。",
+    addTaskHint: "· 標題為必填。\n· 預計小時、截止時間、優先級皆為選填。\n· 自動規劃只會納入已填寫預計小時的任務。\n· 截止時間和優先級會影響自動規劃中的排序。",
     tagAddNew: "＋新增",
     newTagPrompt: "新標籤名稱",
     tagNone: "無",
@@ -876,7 +871,7 @@ const TEXT = {
     tagModalConfirm: "新增",
     planAlgorithmAria: "自動規劃演算法說明",
     planAlgorithmHint:
-      "演算法步驟：\n1. 只納入「進行中」且預計時長、截止時間、優先級至少填寫過一項的任務。\n2. 依截止時間由早到晚排序；無截止時間排在後面；同一截止時間內依優先級數字由大到小。\n3. 若未填預計時長，依是否填寫截止、優先級推測所需工時。\n4. 依上述順序將任務依次裝入你輸入的可用時長，直至時間用完或沒有可裝任務。",
+      "演算法步驟：\n1. 只納入「進行中」且已填寫預計時長的任務。\n2. 依截止時間由早到晚排序；無截止時間排在後面；同一截止時間內依優先級數字由小到大，0（未指定）放最後。\n3. 直接使用任務中填寫的預計時長，不再推測工時。\n4. 依上述順序將任務依次裝入你輸入的可用時長，直至時間用完或沒有可裝任務。",
     profileSettings: "個人資料設定",
     emailBoundLabel: "已綁定電子郵件",
     dataStats: "數據統計",
@@ -905,11 +900,6 @@ const TEXT = {
     tagValidationTooLong: "標籤長度不能超過20個字符",
     tagValidationDuplicate: "標籤已存在",
     noLabels: "暫無標籤",
-    add: "新增",
-    save: "儲存",
-    cancel: "取消",
-    edit: "編輯",
-    delete: "刪除",
     taskLabelsUpdated: "標籤已儲存",
     taskLabelDeleted: "標籤已刪除",
     taskLabelDeleteInUse: "部分標籤仍被任務使用，已保留在標籤庫",
@@ -1089,8 +1079,8 @@ const TEXT = {
     planHoursPlaceholder: "e.g. 2.5",
     planGenerate: "Build suggestions",
     planInvalidHours: "Enter available hours greater than zero.",
-    planNoActiveTasks: "No tasks qualify for auto-plan: fill at least one of estimated hours, due date, or priority.",
-    planSummary: "Includes active tasks that have at least one of hours/due/priority set; ordered by due date, priority, and inferred or actual effort:",
+    planNoActiveTasks: "No tasks qualify for auto-plan: fill estimated hours first.",
+    planSummary: "Includes only active tasks with estimated hours filled in; ordered by due date and priority:",
     planNothingPacked: "No tasks fit this window. Check the time budget or your task list.",
     planSuggestWork: "Spend",
     planFullEstimate: "Total estimate",
@@ -1101,7 +1091,7 @@ const TEXT = {
     editTask: "Edit task",
     saveChanges: "Save",
     addTaskHintTitle: "Rules for adding tasks",
-    addTaskHint: "· Title is required.\n· Estimated hours, due time, and priority are optional.\n· If all three are left empty, auto-plan will skip this task.\n· If only some are set, planning uses them and infers effort when needed.",
+    addTaskHint: "· Title is required.\n· Estimated hours, due time, and priority are optional.\n· Auto-plan only includes tasks with estimated hours filled in.\n· Due time and priority affect ordering inside auto-plan.",
     tagAddNew: "+ New",
     newTagPrompt: "New label name",
     tagNone: "None",
@@ -1120,7 +1110,7 @@ const TEXT = {
     tagModalConfirm: "Add",
     planAlgorithmAria: "Auto-plan algorithm",
     planAlgorithmHint:
-      "How it works:\n1. Only active tasks that have at least one of: estimated hours, due time, or priority.\n2. Sort by earliest due time first; tasks without a due time go last; tie-break by higher priority number.\n3. If hours are missing, infer duration from due time and/or priority.\n4. Greedily pack tasks into your available time budget in that order until time runs out.",
+      "How it works:\n1. Only active tasks with estimated hours filled in.\n2. Sort by earliest due time first; tasks without a due time go last; tie-break by lower priority number, with 0 (unspecified) last.\n3. Use the entered estimated hours directly; no inference is applied.\n4. Greedily pack tasks into your available time budget in that order until time runs out.",
     profileSettings: "Profile Settings",
     emailBoundLabel: "Bound Email",
     dataStats: "Data Statistics",
@@ -1149,11 +1139,6 @@ const TEXT = {
     tagValidationTooLong: "Label length cannot exceed 20 characters",
     tagValidationDuplicate: "Label already exists",
     noLabels: "No labels yet",
-    add: "Add",
-    save: "Save",
-    cancel: "Cancel",
-    edit: "Edit",
-    delete: "Delete",
     taskLabelsUpdated: "Labels saved",
     taskLabelDeleted: "Label deleted",
     taskLabelDeleteInUse: "Some labels are still used by tasks and were kept",
@@ -2167,7 +2152,7 @@ export default function App() {
       /* ignore */
     }
 
-  }, [todos, taskLabels, lang, user?.id, supabase]);
+  }, [todos, taskLabels, lang, user?.id]);
 
   useEffect(() => {
     if (!supabase || !user || !autoSyncEnabled) return;
@@ -3455,7 +3440,7 @@ export default function App() {
     });
   }
 
-  async function persistPomodoroSessionRecord({ taskId, startedAt, endedAt, sessionSeconds }) {
+  async function persistPomodoroSessionRecord({ taskId, startedAt: _startedAt, endedAt, sessionSeconds }) {
     if (!taskId) return false;
     const durationSeconds = Math.max(0, Math.floor(Number(sessionSeconds || 0)));
     if (durationSeconds <= 0) return false;
@@ -3519,7 +3504,9 @@ export default function App() {
 
     async function refreshSessionsWhenManageOpens() {
       try {
-        const sessions = await loadPomodoroSessions(user.id);
+        const loader = loadPomodoroSessionsRef.current;
+        if (typeof loader !== "function") return;
+        const sessions = await loader(user.id);
         if (cancelled) return;
         setPomodoroSessions(sessions);
         setIsPomodoroSessionLoading(false);
