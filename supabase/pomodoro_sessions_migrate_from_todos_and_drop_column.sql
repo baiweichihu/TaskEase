@@ -10,6 +10,7 @@ create table if not exists public.pomodoro_sessions (
   user_id uuid references auth.users(id) on delete cascade not null,
   task_id uuid references public.todos(id) on delete set null,
   task_title text,
+  session_key text not null,
   duration_seconds bigint not null,
   start_time timestamptz not null,
   end_time timestamptz not null,
@@ -19,6 +20,7 @@ create table if not exists public.pomodoro_sessions (
 
 create index if not exists idx_pomodoro_sessions_user_id on public.pomodoro_sessions(user_id);
 create index if not exists idx_pomodoro_sessions_created_at on public.pomodoro_sessions(created_at);
+create unique index if not exists idx_pomodoro_sessions_user_session_key on public.pomodoro_sessions(user_id, session_key);
 
 do $$
 begin
@@ -33,6 +35,7 @@ begin
       user_id,
       task_id,
       task_title,
+      session_key,
       duration_seconds,
       start_time,
       end_time,
@@ -43,6 +46,7 @@ begin
       t.user_id,
       t.id as task_id,
       nullif(btrim(t.title), '') as task_title,
+      t.id::text as session_key,
       greatest(0, coalesce(t.pomodoro_total_seconds, 0))::bigint as duration_seconds,
       (now() - (interval '1 second' * greatest(0, coalesce(t.pomodoro_total_seconds, 0)))) as start_time,
       now() as end_time,

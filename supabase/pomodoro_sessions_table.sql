@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS public.pomodoro_sessions (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   task_id UUID REFERENCES public.todos(id) ON DELETE SET NULL,
   task_title TEXT,
+  session_key TEXT NOT NULL,
   duration_seconds BIGINT NOT NULL,
   start_time TIMESTAMP WITH TIME ZONE NOT NULL,
   end_time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.pomodoro_sessions (
 -- Create index for user queries
 CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_user_id ON public.pomodoro_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_created_at ON public.pomodoro_sessions(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pomodoro_sessions_user_session_key ON public.pomodoro_sessions(user_id, session_key);
 
 -- Enable RLS
 ALTER TABLE public.pomodoro_sessions ENABLE ROW LEVEL SECURITY;

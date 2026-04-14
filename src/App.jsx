@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { countOccurrencesByRule, getNextRecurringIso, normalizeDateKey } from "./utils/recurrence";
 import { applyPomodoroStopProgress } from "./utils/pomodoroProgress";
+import { dedupePomodoroSessionList, getPomodoroSessionSyncKey } from "./utils/pomodoroSessions";
 import { Header } from "./components/Header";
 import { TaskManager } from "./components/TaskManager";
 import { AuthModal } from "./components/AuthModal";
@@ -1350,10 +1351,12 @@ function mapPomodoroSession(row) {
   const startTime = String(row?.start_time || "").trim();
   const endTime = String(row?.end_time || "").trim();
   const normalizedId = String(row?.id || "").trim();
+  const sessionKey = String(row?.session_key || "").trim();
   return {
     id: normalizedId,
     task_id: row?.task_id ?? null,
     task_title: String(row?.task_title || "").trim(),
+    session_key: sessionKey || normalizedId,
     duration_seconds: durationSeconds,
     start_time: startTime,
     end_time: endTime,
@@ -1373,7 +1376,7 @@ function readLocalPomodoroSessions(key) {
     const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    return dedupePomodoroSessionList(parsed)
       .map(mapPomodoroSession)
       .filter((item) => item && item.id)
       .sort((a, b) => toTs(b.start_time) - toTs(a.start_time));
@@ -1383,7 +1386,7 @@ function readLocalPomodoroSessions(key) {
 }
 
 function writeLocalPomodoroSessions(key, sessions) {
-  localStorage.setItem(key, JSON.stringify(Array.isArray(sessions) ? sessions : []));
+  localStorage.setItem(key, JSON.stringify(dedupePomodoroSessionList(Array.isArray(sessions) ? sessions : [])));
 }
 
 function readLocalPomodoroDeletedSessionIds(key) {
@@ -1452,15 +1455,7 @@ function applyPomodoroTotalsFromSessions(todoList, sessions) {
 }
 
 function mergePomodoroSessionLists(...lists) {
-  const merged = new Map();
-  for (const list of lists) {
-    if (!Array.isArray(list)) continue;
-    for (const session of list) {
-      if (!session || !session.id) continue;
-      merged.set(String(session.id), { ...merged.get(String(session.id)), ...session });
-    }
-  }
-  return Array.from(merged.values()).sort((a, b) => toTs(b.start_time) - toTs(a.start_time));
+  return dedupePomodoroSessionList(lists.flatMap((list) => (Array.isArray(list) ? list : [])));
 }
 
 function getLastSyncAt(userId) {
@@ -2375,7 +2370,7 @@ export default function App() {
     const [{ data, error }, tombstoneIds] = await Promise.all([
       supabase
         .from(POMODORO_SESSIONS_TABLE)
-        .select("id,task_id,task_title,duration_seconds,start_time,end_time")
+        .select("id,task_id,task_title,session_key,duration_seconds,start_time,end_time")
         .eq("user_id", userId)
         .order("start_time", { ascending: false }),
       loadPomodoroTombstoneSessionIds(userId),
@@ -2408,21 +2403,28 @@ export default function App() {
     }
 
     let nextSessions = localSessions.filter((session) => !tombstonedIds.has(String(session.id || "").trim()));
+    nextSessions = dedupePomodoroSessionList(nextSessions);
 
     for (let index = 0; index < nextSessions.length; index += 1) {
       const session = nextSessions[index];
       if (!session || !session.task_id) continue;
 
+      const sessionSyncKey = getPomodoroSessionSyncKey(session);
+      if (!session.session_key) {
+        session.session_key = sessionSyncKey;
+      }
+
       const payload = {
         user_id: userId,
         task_id: session.task_id,
         task_title: session.task_title || null,
+        session_key: session.session_key || sessionSyncKey,
         duration_seconds: Math.max(0, Number(session.duration_seconds || 0)),
         start_time: session.start_time,
         end_time: session.end_time,
       };
 
-      if (isCloudPomodoroSessionId(session.id)) {
+      if (isCloudPomodoroSessionId(session.id) && String(session.session_key || "").trim() === String(session.id || "").trim()) {
         const updateResult = await withTimeout(
           supabase
             .from(POMODORO_SESSIONS_TABLE)
@@ -2478,14 +2480,8 @@ export default function App() {
         .from(POMODORO_SESSIONS_TABLE)
         .select("id")
         .eq("user_id", userId)
-        .eq("start_time", session.start_time)
+        .eq("session_key", session.session_key || sessionSyncKey)
         .limit(1);
-
-      if (session.task_id) {
-        lookupQuery = lookupQuery.eq("task_id", session.task_id);
-      } else {
-        lookupQuery = lookupQuery.is("task_id", null);
-      }
 
       const existingResult = await withTimeout(lookupQuery.maybeSingle(), OP_TIMEOUT_MS);
       if (existingResult?.error) {
@@ -2530,6 +2526,7 @@ export default function App() {
       nextSessions[index] = {
         ...session,
         id: String(insertResult.data.id),
+        session_key: session.session_key || sessionSyncKey,
         user_id: userId,
         local_dirty: false,
       };
@@ -3441,6 +3438,7 @@ export default function App() {
     
     const nextSession = {
       id: crypto.randomUUID(),
+      session_key: crypto.randomUUID(),
       user_id: user?.id || null,
       task_id: taskId,
       task_title: String(targetTask?.title || "").trim() || null,
@@ -3453,11 +3451,7 @@ export default function App() {
 
     // Prevent duplicate sessions: check if a very similar session already exists in local storage
     const existingSessions = readLocalPomodoroSessions(sessionKey);
-    const isDuplicate = existingSessions.some(session => 
-      session.task_id === taskId && 
-      session.duration_seconds === durationSeconds &&
-      Math.abs(new Date(session.start_time).getTime() - startTimeMs) < 2000 // Within 2 seconds
-    );
+    const isDuplicate = existingSessions.some((session) => String(session.session_key || "").trim() === String(nextSession.session_key).trim());
     
     if (isDuplicate) {
       pushDiag("pomodoro", "session_duplicate_prevented", { taskId, durationSeconds }, "warn");
