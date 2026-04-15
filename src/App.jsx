@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { countOccurrencesByRule, getNextRecurringIso, normalizeDateKey } from "./utils/recurrence";
 import { applyPomodoroStopProgress } from "./utils/pomodoroProgress";
@@ -83,6 +83,7 @@ function PomodoroManagementModal({
   onDelete,
   isSaving,
   sessions,
+  taskTitleById,
   isLoadingSession,
 }) {
   const [editingSessionId, setEditingSessionId] = useState(null);
@@ -243,6 +244,7 @@ function PomodoroManagementModal({
                       <div>
                         {group.sessions.map((session, sessionIdx) => {
                           const isEditing = editingSessionId === session.id;
+                          const resolvedTitle = String(taskTitleById?.[String(session.task_id || "")] || "").trim() || String(session.task_title || "").trim() || "Untitled";
                           const rowNum = groupedSessions
                             .slice(0, groupIdx)
                             .reduce((acc, g) => acc + g.sessions.length, 0) + sessionIdx + 1;
@@ -266,7 +268,7 @@ function PomodoroManagementModal({
 
                               {/* Task name */}
                               <div style={{ color: textColor, fontSize: "0.95rem" }}>
-                                {session.task_title || "Untitled"}
+                                {resolvedTitle}
                               </div>
 
                               {/* Start time */}
@@ -441,6 +443,7 @@ const PREFERENCES_TABLE = "user_preferences";
 const POMODORO_SESSIONS_TABLE = "pomodoro_sessions";
 const POMODORO_SESSION_TOMBSTONES_TABLE = "pomodoro_session_tombstones";
 const POMODORO_MAX_SECONDS = 5 * 3600;
+const POMODORO_MIN_RECORD_SECONDS = 60;
 
 const STATUS_PENDING = "pending";
 const STATUS_DONE = "done";
@@ -1854,6 +1857,16 @@ export default function App() {
   const pomodoroRecords = useMemo(() => {
     return todos.filter((item) => Math.max(0, Number(item?.pomodoro_total_seconds || 0)) > 0 && item?.status !== STATUS_DELETED);
   }, [todos]);
+  const pomodoroTaskTitleById = useMemo(() => {
+    const map = {};
+    for (const todo of Array.isArray(todos) ? todos : []) {
+      const todoId = String(todo?.id || "").trim();
+      if (!todoId || todo?.status === STATUS_DELETED) continue;
+      const title = String(todo?.title || "").trim();
+      if (title) map[todoId] = title;
+    }
+    return map;
+  }, [todos]);
 
   const t = TEXT[lang];
   const storageKey = user ? `taskease_todos_${user.id}` : GUEST_KEY;
@@ -2312,7 +2325,6 @@ export default function App() {
     const candidates = (Array.isArray(todoList) ? todoList : [])
       .map((todo) => ({
         taskId: String(todo?.id || "").trim(),
-        taskTitle: String(todo?.title || "").trim() || null,
         totalSeconds: Math.max(0, Math.floor(Number(todo?.pomodoro_total_seconds || 0))),
       }))
       .filter((x) => x.taskId && x.totalSeconds > 0);
@@ -2346,7 +2358,6 @@ export default function App() {
       rows.push({
         user_id: userId,
         task_id: item.taskId,
-        task_title: item.taskTitle,
         duration_seconds: delta,
         start_time: new Date(endTs - delta * 1000).toISOString(),
         end_time: new Date(endTs).toISOString(),
@@ -2370,7 +2381,7 @@ export default function App() {
     const [{ data, error }, tombstoneIds] = await Promise.all([
       supabase
         .from(POMODORO_SESSIONS_TABLE)
-        .select("id,task_id,task_title,session_key,duration_seconds,start_time,end_time")
+        .select("id,task_id,session_key,duration_seconds,start_time,end_time")
         .eq("user_id", userId)
         .order("start_time", { ascending: false }),
       loadPomodoroTombstoneSessionIds(userId),
@@ -2417,7 +2428,6 @@ export default function App() {
       const payload = {
         user_id: userId,
         task_id: session.task_id,
-        task_title: session.task_title || null,
         session_key: session.session_key || sessionSyncKey,
         duration_seconds: Math.max(0, Number(session.duration_seconds || 0)),
         start_time: session.start_time,
@@ -3422,10 +3432,9 @@ export default function App() {
   async function persistPomodoroSessionRecord({ taskId, startedAt: _startedAt, endedAt, sessionSeconds }) {
     if (!taskId) return false;
     const durationSeconds = Math.max(0, Math.floor(Number(sessionSeconds || 0)));
-    if (durationSeconds <= 0) return false;
+    if (durationSeconds < POMODORO_MIN_RECORD_SECONDS) return false;
 
     const sessionKey = getPomodoroSessionsStorageKey(user?.id);
-    const targetTask = todos.find((item) => item.id === taskId);
     
     // Use precise timestamps, with endedAt as primary reference
     const endTs = Number.isFinite(Number(endedAt)) ? Number(endedAt) : Date.now();
@@ -3441,7 +3450,6 @@ export default function App() {
       session_key: crypto.randomUUID(),
       user_id: user?.id || null,
       task_id: taskId,
-      task_title: String(targetTask?.title || "").trim() || null,
       duration_seconds: durationSeconds,
       start_time: new Date(startTimeMs).toISOString(),
       end_time: new Date(endTimeMs).toISOString(),
@@ -3533,7 +3541,7 @@ export default function App() {
     }
     
     // Only persist session record if it has actual duration
-    if (nextSession?.sessionSeconds && nextSession.sessionSeconds > 0) {
+    if (Number(nextSession?.sessionSeconds || 0) >= POMODORO_MIN_RECORD_SECONDS) {
       await persistPomodoroSessionRecord({
         taskId: nextSession.taskId,
         startedAt: nextSession.startedAt,
@@ -4259,6 +4267,7 @@ export default function App() {
           onDelete={handleDeletePomodoroRecord}
           isSaving={isPomodoroManageSaving}
           sessions={pomodoroSessions}
+          taskTitleById={pomodoroTaskTitleById}
           isLoadingSession={isPomodoroSessionLoading}
         />
 
