@@ -329,6 +329,12 @@
 **验证**：lint 0 问题 / i18n 170 key 无缺失 / 测试 7 文件全通过 / 构建成功
 浏览器实测：语言按钮为 `["中","Eng"]`、按钮行间距统一 16px、日期字段空态与选中态显示均正确
 
+**已提交并发布**
+- 代码按语义拆成 3 个提交推送（`3cead51` 移除 Supabase / `fc2529c` 接入 Tauri / `733db16` 文档重写），其后补了 `48f5e15`（忽略 `.workbuddy/`）
+- 打注释标签 `v0.1.0`，并用 GitHub CLI 创建 Release 附带安装包
+- 发布地址：https://github.com/baiweichihu/TaskEase/releases/tag/v0.1.0
+- 新增项目级 `.workbuddy/` 目录存放 AI 助手的工作记忆（含发布流程与踩坑记录），已加入 `.gitignore` 不参与仓库
+
 **遗留说明**
 - 所有改动**尚未提交 git**（工作区 40+ 个文件变动，可随时 `git checkout` 回滚；被删除的文档均存在于 git HEAD 中，可恢复）
 - 本轮改动全在前端，**需重新执行 `npm run desktop:build` 才会进入 exe/安装包**
