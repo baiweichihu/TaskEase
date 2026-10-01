@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# AI 助手的工作记忆（本地使用，不进仓库）
+.workbuddy/
 .env
 .env.*
 !.env.example
