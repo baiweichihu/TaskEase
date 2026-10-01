@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskEase</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      /*
+       * Manrope 由 @fontsource 本地打包（src/main.jsx），中文字体走系统字体栈。
+       * 这样桌面版首次启动即可离线正常显示，不依赖任何外部 CDN。
+       */
+      :root {
+        --te-font-sans: "Manrope", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
+          "Hiragino Sans GB", "Source Han Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --te-font-display: "Manrope", "Microsoft YaHei", "PingFang SC", "Noto Sans SC",
+          system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      * {
+        font-family: var(--te-font-sans);
+      }
+      /* 英文和数字使用 Manrope */
+      h1, h2, h3, h4, h5, h6, .fw-semibold, .fw-bold, .display-4, .display-6 {
+        font-family: var(--te-font-display);
+      }
+    </style>
+    <script type="module" crossorigin src="/TaskEase/assets/index-Bw_QAGRe.js"></script>
+    <link rel="stylesheet" crossorigin href="/TaskEase/assets/index-B-cy2XKx.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
