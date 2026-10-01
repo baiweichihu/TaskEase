@@ -1,4 +1,5 @@
 import { ModalShell } from "./ModalShell";
+import { storageKind } from "../storage";
 
 export function AboutModal({
   isOpen,
@@ -19,12 +20,17 @@ export function AboutModal({
             <div className="modal-body d-grid gap-3">
               <p className="mb-1">{t.aboutSummary}</p>
               <ul className="mb-1 ps-3">
-                <li>{t.aboutFeatureAuth}</li>
                 <li>{t.aboutFeatureCalendar}</li>
                 <li>{t.aboutFeatureRecurring}</li>
                 <li>{t.aboutFeatureSync}</li>
                 <li>{t.aboutFeatureI18n}</li>
               </ul>
+              <div>
+                <div className="small text-muted mb-1">{t.dataLocation}</div>
+                <div className="small">
+                  {storageKind === "sqlite" ? t.dataLocationDesktop : t.dataLocationWeb}
+                </div>
+              </div>
               <div>
                 <div className="small text-muted mb-1">{t.aboutRepo}</div>
                 <a href={repoUrl} target="_blank" rel="noreferrer">

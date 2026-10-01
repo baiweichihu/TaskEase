@@ -1,14 +1,12 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { countOccurrencesByRule, getNextRecurringIso, normalizeDateKey } from "./utils/recurrence";
 import { applyPomodoroStopProgress } from "./utils/pomodoroProgress";
-import { dedupePomodoroSessionList, getPomodoroSessionSyncKey } from "./utils/pomodoroSessions";
+import { dedupePomodoroSessionList } from "./utils/pomodoroSessions";
+import { getAppLocale, toLocalDateKey } from "./utils/locale";
 import { Header } from "./components/Header";
 import { TaskManager } from "./components/TaskManager";
-import { AuthModal } from "./components/AuthModal";
 import { AddTaskModal } from "./components/AddTaskModal";
 import { PlanWorkModal } from "./components/PlanWorkModal";
-import { ProfileSettingsModal } from "./components/ProfileSettingsModal";
 import { Toast } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { PomodoroTimer } from "./components/PomodoroTimer";
@@ -16,64 +14,15 @@ import { AboutModal } from "./components/AboutModal";
 import { DataStatsModal } from "./components/DataStatsModal";
 import { TaskLabelsModal } from "./components/TaskLabelsModal";
 import { ModalShell } from "./components/ModalShell";
-
-// OTP验证模态框组件
-function OtpModal({ isOpen, onClose, t, otpEmail, otpCode, setOtpCode, onOtpVerify, isVerifyingOtp, pageBg, themeColors }) {
-  const customInputStyle = {
-    backgroundColor: themeColors.listBg,
-    borderColor: themeColors.softBtnBorder,
-    color: "#2b2b2b",
-  };
-
-  return (
-    <ModalShell isOpen={isOpen} onClose={onClose}>
-      {(requestClose) => (
-        <div className="modal-dialog" style={{ marginTop: "60px" }}>
-          <div className="modal-content" style={{ backgroundColor: pageBg }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title fs-6">{t.otpModalTitle}</h2>
-              <button type="button" className="btn-close" aria-label={t.close} onClick={requestClose} />
-            </div>
-            <div className="modal-body">
-              <div className="mb-3">
-                <p className="small text-body-secondary">
-                  {t.otpSentIntro} <strong>{otpEmail}</strong> {t.otpSentOutro}
-                </p>
-              </div>
-              <form className="d-grid gap-2" onSubmit={onOtpVerify}>
-                <input 
-                  className="form-control" 
-                  type="text" 
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder={t.otpCodePlaceholder} 
-                  value={otpCode} 
-                  onChange={(e) => setOtpCode(e.target.value)}
-                  style={customInputStyle}
-                  required 
-                />
-                <button
-                  className="btn text-dark"
-                  type="submit"
-                  disabled={isVerifyingOtp}
-                  style={{ backgroundColor: themeColors.softBtn, borderColor: themeColors.softBtnBorder }}
-                >
-                  {t.otpVerify}
-                  {isVerifyingOtp ? <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" /> : null}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-    </ModalShell>
-  );
-}
+import { DataBackupModal } from "./components/DataBackupModal";
+import { DateInput } from "./components/DateInput";
+import { storage } from "./storage";
 
 function PomodoroManagementModal({
   isOpen,
   onClose,
   t,
+  locale,
   pageBg,
   themeColors,
   resolvedTheme,
@@ -114,19 +63,18 @@ function PomodoroManagementModal({
 
   // Group sessions by date
   const groupedSessions = useMemo(() => {
-    // Convert selected date input (YYYY-MM-DD) to a comparable date string
-    const selectedDate = new Date(selectedDateInput);
-    const selectedDateKey = selectedDate.toLocaleDateString();
-    
+    // 选中日期本身就是 YYYY-MM-DD，直接用；不要再交给 Date 解析
+    // （new Date("YYYY-MM-DD") 按 UTC 解析，再用本地方法取日期会在负时区跨天）
+    const selectedDateKey = String(selectedDateInput || "").trim();
+
     const groups = {};
     sessions.forEach((session) => {
-      const startTime = new Date(session.start_time || "");
-      if (!Number.isFinite(startTime.getTime())) return;
-      const dateKey = startTime.toLocaleDateString();
-      
+      const dateKey = toLocalDateKey(session.start_time || "");
+      if (!dateKey) return;
+
       // Only include sessions from the selected date
       if (dateKey !== selectedDateKey) return;
-      
+
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -158,7 +106,8 @@ function PomodoroManagementModal({
   function formatTimeOnly(isoString) {
     const d = new Date(isoString);
     if (!Number.isFinite(d.getTime())) return "-";
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    // 必须显式传 locale：不传会跟随系统语言，英文界面下会显示中文格式
+    return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   }
 
   function startEditing(session) {
@@ -205,18 +154,15 @@ function PomodoroManagementModal({
                 <label style={{ color: textColor, fontSize: "0.9rem", margin: 0, whiteSpace: "nowrap" }}>
                   {t.pomodoroDateLabel}:
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   value={selectedDateInput}
+                  hint={t.datePlaceholder}
                   onChange={(e) => setSelectedDateInput(e.target.value)}
                   style={{
                     backgroundColor: themeColors.listBg,
                     borderColor: themeColors.softBtnBorder,
                     color: textColor,
                     fontSize: "0.9rem",
-                    padding: "0.5rem",
-                    border: `1px solid ${themeColors.softBtnBorder}`,
-                    borderRadius: "4px",
                     flex: "1",
                     maxWidth: "200px",
                   }}
@@ -435,13 +381,6 @@ function PomodoroManagementModal({
   );
 }
 
-const SUPABASE_URL = "https://ccfmbcvlmlvirkattqnv.supabase.co";
-const SUPABASE_KEY = "sb_publishable_XO9o2kqTKkcnHmGEqCmOoQ_vcNyBGk9";
-const TODO_TABLE = "todos";
-const PROFILE_TABLE = "profiles";
-const PREFERENCES_TABLE = "user_preferences";
-const POMODORO_SESSIONS_TABLE = "pomodoro_sessions";
-const POMODORO_SESSION_TOMBSTONES_TABLE = "pomodoro_session_tombstones";
 const POMODORO_MAX_SECONDS = 5 * 3600;
 const POMODORO_MIN_RECORD_SECONDS = 60;
 
@@ -450,91 +389,55 @@ const STATUS_DONE = "done";
 const STATUS_DELETED = "deleted";
 const LABEL_FILTER_UNLABELED = "__UNLABELED__";
 
-const GUEST_KEY = "taskease_todos_guest";
+// 界面偏好（主题 / 语言 / 时间制式）体量极小、丢了也能 30 秒重设，
+// 因此仍放在 localStorage 以便同步读取；任务与番茄钟数据才走 src/storage。
 const THEME_KEY = "taskease_theme_mode";
-const THEME_PRESET_KEY = "taskease_theme_preset";
-const CUSTOM_BG_KEY = "taskease_custom_bg";
-const GUEST_POMODORO_SESSIONS_KEY = "taskease_pomodoro_sessions_guest";
-const GUEST_POMODORO_DELETED_KEY = "taskease_pomodoro_sessions_deleted_guest";
 const LANG_KEY = "taskease_lang";
 const CLOCK_KEY = "taskease_clock_format";
-const AUTO_SYNC_KEY = "taskease_auto_sync_enabled";
-const LAST_SYNC_AT_KEY_PREFIX = "taskease_last_sync_at_";
-const PENDING_USERNAME_KEY_PREFIX = "taskease_pending_username_";
-const USERNAME_CACHE_KEY_PREFIX = "taskease_username_cache_";
-const GUEST_LABELS_KEY = "taskease_task_labels_guest";
-const USER_LABELS_KEY_PREFIX = "taskease_task_labels_";
 const PROJECT_REPO_URL = "https://github.com/baiweichihu/TaskEase";
-const SUPABASE_SINGLETON_KEY = "__taskease_supabase_client__";
 
-function getTaskLabelsStorageKey(userId) {
-  const id = String(userId || "").trim();
-  return id ? `${USER_LABELS_KEY_PREFIX}${id}` : GUEST_LABELS_KEY;
-}
-
-function getThemeColors(preset, tone) {
-  const themes = {
-    beige: {
-      light: { pageBg: "#efe3cb", panelBg: "#f8eede", listBg: "#faefdf", logoColor: "#6b4f2f", softBtn: "#f2c84b", softBtnBorder: "#e9bd34", activeBtn: "#e0ae1c", activeBtnBorder: "#d39d0c" },
-      dark: { pageBg: "#1e2636", panelBg: "#2a3447", listBg: "#334159", logoColor: "#f8e7c4", softBtn: "#f2c84b", softBtnBorder: "#e9bd34", activeBtn: "#d39d0c", activeBtnBorder: "#b8860b" },
-    },
-    pink: {
-      light: { pageBg: "#f8dfe8", panelBg: "#fdeaf1", listBg: "#fff2f7", logoColor: "#7a3f58", softBtn: "#f3b7cc", softBtnBorder: "#e89fb9", activeBtn: "#de88ab", activeBtnBorder: "#cc7098" },
-      dark: { pageBg: "#2f2230", panelBg: "#3d2a3d", listBg: "#4a3550", logoColor: "#ffd9e8", softBtn: "#f3b7cc", softBtnBorder: "#e89fb9", activeBtn: "#d785a8", activeBtnBorder: "#bd678f" },
-    },
-    blue: {
-      light: { pageBg: "#deebf8", panelBg: "#eaf3fc", listBg: "#f2f8ff", logoColor: "#2f5675", softBtn: "#9fc7eb", softBtnBorder: "#84b8e3", activeBtn: "#6fa7dd", activeBtnBorder: "#4b8fcf" },
-      dark: { pageBg: "#1f2b3a", panelBg: "#27384b", listBg: "#32465f", logoColor: "#d8ebff", softBtn: "#9fc7eb", softBtnBorder: "#84b8e3", activeBtn: "#659ece", activeBtnBorder: "#4a84b4" },
-    },
-    lavender: {
-      light: { pageBg: "#ebe3f6", panelBg: "#f3ecfb", listBg: "#f8f4fe", logoColor: "#5e4b7a", softBtn: "#cab3e8", softBtnBorder: "#b9a0de", activeBtn: "#ab8fd4", activeBtnBorder: "#977ac4" },
-      dark: { pageBg: "#242437", panelBg: "#2f2f45", listBg: "#3a3a57", logoColor: "#eadfff", softBtn: "#cab3e8", softBtnBorder: "#b9a0de", activeBtn: "#a68ace", activeBtnBorder: "#8f72b9" },
-    },
-    "custom-bg": {
-      light: { pageBg: "rgba(255, 255, 255, 0.16)", panelBg: "rgba(255, 255, 255, 0.26)", listBg: "rgba(255, 255, 255, 0.2)", logoColor: "#ffffff", softBtn: "rgba(255, 255, 255, 0.58)", softBtnBorder: "rgba(255, 255, 255, 0.72)", activeBtn: "rgba(255, 255, 255, 0.78)", activeBtnBorder: "rgba(255, 255, 255, 0.9)" },
-      dark: { pageBg: "rgba(255, 255, 255, 0.16)", panelBg: "rgba(255, 255, 255, 0.26)", listBg: "rgba(255, 255, 255, 0.2)", logoColor: "#ffffff", softBtn: "rgba(255, 255, 255, 0.58)", softBtnBorder: "rgba(255, 255, 255, 0.72)", activeBtn: "rgba(255, 255, 255, 0.78)", activeBtnBorder: "rgba(255, 255, 255, 0.9)" },
-    },
+// 主题精简为单一「米黄」配色，仅区分浅色 / 深色两种色调
+function getThemeColors(tone) {
+  const palette = {
+    light: { pageBg: "#efe3cb", panelBg: "#f8eede", listBg: "#faefdf", logoColor: "#6b4f2f", softBtn: "#f2c84b", softBtnBorder: "#e9bd34", activeBtn: "#e0ae1c", activeBtnBorder: "#d39d0c" },
+    dark: { pageBg: "#1e2636", panelBg: "#2a3447", listBg: "#334159", logoColor: "#f8e7c4", softBtn: "#f2c84b", softBtnBorder: "#e9bd34", activeBtn: "#d39d0c", activeBtnBorder: "#b8860b" },
   };
 
-  const safePreset = Object.prototype.hasOwnProperty.call(themes, preset) ? preset : "beige";
-  const safeTone = tone === "dark" ? "dark" : "light";
-  return themes[safePreset][safeTone];
+  return palette[tone === "dark" ? "dark" : "light"];
 }
 
 const TEXT = {
   "zh-CN": {
-    appTitle: "TaskEase",
     settings: "设置",
-    themePalette: "主题",
-    themeBeige: "米黄",
-    themePink: "粉色",
-    themeBlue: "浅蓝",
-    themeLavender: "淡紫",
-    themeCustomBg: "自定义背景",
-    customBgInput: "背景图片 URL",
-    customBgPlaceholder: "输入图片链接，留空则用默认渐变背景",
-    customBgReset: "清除背景",
-    customBgLocalOnly: "仅本地可见，不上传云端",
-    customBgLocalFile: "本地文件",
-    customBgSort: "排序",
-    customBgSortTime: "上传时间",
-    customBgSortName: "文件名",
-    customBgEmpty: "暂无背景，点击\"+\"按钮添加",
-    customBgAddNew: "添加文件",
-    or: "或者",
     confirm: "确定",
+    add: "添加",
+    delete: "删除",
+    themeLabel: "外观",
+    themeLight: "浅色",
+    themeDark: "深色",
+    themeSystem: "跟随系统",
+    loadingData: "正在加载数据…",
+    dataLocation: "数据存储位置",
+    dataBackup: "数据与备份",
+    dataLocationDesktop: "SQLite 数据库（存放在 Windows AppData 数据目录中）",
+    dataLocationWeb: "浏览器本地存储（localStorage）",
+    datePlaceholder: "年/月/日",
+    backupSection: "备份",
+    backupHint: "备份文件是可读的 JSON，包含全部任务、番茄钟记录与标签。",
+    backupRestoreHint: "备份文件可以保存到任意位置；需要恢复时用「导入备份」选择它即可。",
+    exportBackup: "导出备份",
+    exportBackupSuccess: "备份已导出。",
+    exportBackupFailed: "导出备份失败。",
+    importBackup: "导入备份",
+    importBackupConfirmTitle: "确认导入备份？",
+    importBackupConfirmMessage: "导入会覆盖当前全部任务、番茄钟记录与标签，且无法撤销。建议先导出一份当前数据。",
+    importBackupConfirm: "确认导入",
+    importBackupSuccess: "导入完成：",
+    importBackupFailed: "导入备份失败。",
+    unitTasks: "个任务",
+    unitSessions: "条番茄钟记录",
     language: "语言",
     clockFormat: "时间制式",
-    h12: "12 小时制",
-    h24: "24 小时制",
-    logout: "退出登录",
-    login: "登录",
-    account: "账号",
-    register: "注册",
-    email: "邮箱",
-    username: "用户名",
-    password: "密码",
-    confirmPassword: "确认密码",
     close: "关闭",
     addTask: "添加任务",
     save: "保存",
@@ -544,7 +447,6 @@ const TEXT = {
     labelFilter: "标签筛选",
     labelFilterAll: "全部标签",
     labelFilterNoLabel: "无标签",
-    labelFilterSelected: "已选标签",
     noTask: "暂无任务",
     allDone: "🎉🎉🎉 所有任务均已完成！好好休息一下吧！🎉🎉🎉",
     edit: "编辑",
@@ -555,33 +457,6 @@ const TEXT = {
     durationHourUnit: "小时",
     durationMinuteUnit: "分钟",
     durationSecondUnit: "秒",
-    localOnly: "Supabase 未连接，当前仅本地模式。",
-    notLoginLocal: "未登录，使用本地模式。",
-    syncFallback: "云同步失败，已回退本地。",
-    addFallback: "云端添加失败，已写入本地。",
-    updateRollback: "更新失败，已回滚。",
-    deleteRollback: "删除失败，已回滚。",
-    supabaseMissing: "Supabase 未连接。",
-    invalidLogin: "请输入有效邮箱和密码。",
-    loginFailed: "登录失败，请检查邮箱或密码。",
-    loginSuccess: "登录成功。",
-    invalidEmail: "请输入有效邮箱地址。",
-    invalidUsername: "用户名需为 1-15 个字符，可包含中文、大小写和任意符号。",
-    shortPassword: "密码至少 6 位。",
-    passwordMismatch: "两次密码不一致。",
-    usernameTaken: "用户名已存在。",
-    registerFailed: "注册失败",
-    registerSuccess: "注册成功。",
-    registerNeedEmailCfg: "验证码已发送到邮箱，请输入邮件中的 6 位验证码完成注册。",
-    otpModalTitle: "邮箱验证",
-    otpSentIntro: "验证码已发送至",
-    otpSentOutro: "，请输入邮件中的 6 位验证码。",
-    otpCodePlaceholder: "6 位验证码",
-    otpVerify: "验证",
-    otpInvalid: "请输入邮箱验证码。",
-    otpFailed: "验证码无效或已过期",
-    registerVerified: "邮箱验证成功，已登录。",
-    authRateLimitHint: "验证邮件发送过于频繁，请稍后再试。",
     cancel: "取消",
     addTaskSubmit: "添加",
     addSuccess: "任务已添加。",
@@ -639,8 +514,6 @@ const TEXT = {
     planAlgorithmAria: "自动规划算法说明",
     planAlgorithmHint:
       "算法步骤：\n1. 只纳入「进行中」且已填写预计时长的任务。\n2. 按截止时间从早到晚排序；无截止时间排在后面；同一截止时间内按优先级数字从小到大，0（未指定）放最后。\n3. 直接使用任务里填写的预计时长，不再推测工时。\n4. 按上述顺序将任务依次装入你输入的可用时长，直至时间用完或没有可装任务。",
-    profileSettings: "个人资料设置",
-    emailBoundLabel: "已绑定邮箱",
     dataStats: "数据统计",
     dataStatsTitle: "数据统计",
     allTimeStats: "累计统计",
@@ -653,10 +526,7 @@ const TEXT = {
     pomodoroManageTitle: "番茄钟管理",
     pomodoroManageHint: "可在此修改已记录时长或删除记录。单任务番茄钟时长上限为 5 小时。",
     pomodoroManageEmpty: "暂无番茄钟记录。",
-    pomodoroDuration: "时长",
-    pomodoroMinutes: "分钟",
     pomodoroDateLabel: "日期",
-    pomodoroDateConfirm: "确定",
     pomodoroNoRecordsForDate: "该日期暂无记录。",
     pomodoroLimitReached: "已达到番茄钟上限 5 小时，计时已强制停止。",
     pomodoroOnlyOne: "只能同时运行一个番茄钟",
@@ -667,7 +537,6 @@ const TEXT = {
     noLabels: "暂无标签",
     taskLabelsUpdated: "标签已保存",
     taskLabelDeleted: "标签已删除",
-    taskLabelDeleteInUse: "部分标签仍被任务使用，已保留在标签库",
     labelDeleteConfirmTitle: "删除被占用标签",
     labelDeleteConfirmMessagePrefix: "标签",
     labelDeleteConfirmMessageSuffix: "正在被部分任务使用。继续删除将清空这些任务的标签字段，任务本身不会删除。",
@@ -677,36 +546,8 @@ const TEXT = {
     pomodoroRecordDeleted: "番茄钟记录已删除。",
     statsDescription: "累计已完成的任务统计。最近一周基于过去7天内完成的任务。",
     recordedTime: "已计时",
-    updateEmail: "更改邮箱",
-    updateUsername: "更改用户名",
-    resetPassword: "重置密码",
-    updateEmailSuccess: "邮箱更新请求已发送，请前往邮箱确认。",
-    updateUsernameSuccess: "用户名更新成功。",
-    resetPasswordSent: "密码重置邮件已发送，请查收。",
-    usernameDbConstraintHint: "数据库仍在使用旧用户名规则，请先执行 supabase/profiles_username_constraint_migration.sql。",
-    usernameUnchanged: "用户名未变化。",
-    actionNeedLogin: "请先登录后再操作。",
-    requestTimeout: "请求超时，请重试。",
-    autoSyncLabel: "自动同步",
-    autoSyncOn: "开启",
-    autoSyncOff: "关闭",
-    autoSyncEnabledNotice: "自动同步已开启（每5分钟）。",
-    autoSyncDisabledNotice: "自动同步已关闭。",
-    syncSuccess: "同步成功。",
-    syncNeedLogin: "当前会话不可用，请重新登录后再同步。",
-    syncFailed: "同步失败",
-    autoSyncSuccessNotice: "自动同步成功。",
-    syncBusyPrefix: "同步被占用，当前持有者",
-    syncing: "同步中...",
     editTaskSuccess: "编辑任务成功。",
-    syncNow: "云同步",
     submitting: "提交中...",
-    migrateLocalTitle: "检测到本地数据",
-    migrateLocalMessage: "当前账号云端任务为空，但本地有任务。是否将本地任务、背景和偏好迁移到当前账号？",
-    migrateLocalConfirm: "迁移并清理本地",
-    migrateLocalSuccess: "本地数据已迁移到当前账号。",
-    migrateLocalFailed: "迁移失败",
-    editPrompt: "编辑任务",
     titlePlaceholder: "任务标题",
     estHours: "预计任务时长",
     dueAt: "截止时间",
@@ -729,289 +570,47 @@ const TEXT = {
     repeatUntilRequired: "请设置重复截止日期。",
     repeatUntilBeforeStart: "重复截止日期不能早于开始日期。",
     repeatUntilMaxDaysError: "重复次数最多 30 次。",
-    recurrenceCreateFallback: "重复任务已添加到本地，云端写入失败。",
     aboutUs: "关于我们",
-    aboutSummary: "TaskEase 是一个现代化任务管理网页，帮助你更高效地安排每日工作。",
-    aboutFeatureAuth: "支持账号注册登录与个人数据隔离。",
+    aboutSummary: "TaskEase 是一个本地优先的任务管理与番茄钟桌面应用，数据全部保存在你自己的电脑上，无需联网、无需账号。",
     aboutFeatureCalendar: "提供日历视图和拖拽改期。",
     aboutFeatureRecurring: "支持每日/每周/每月重复任务。",
     aboutFeatureSync: "支持本地存储与 Supabase 云同步。",
-    aboutFeatureI18n: "支持简体中文、繁体中文与英文。",
+    aboutFeatureI18n: "支持简体中文与英文。",
     aboutRepo: "GitHub 仓库",
     remark: "备注",
     weekdays: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
   },
-  "zh-TW": {
-    appTitle: "TaskEase",
-    settings: "設定",
-    themePalette: "主題",
-    themeBeige: "米黃",
-    themePink: "粉色",
-    themeBlue: "淺藍",
-    themeLavender: "淡紫",
-    themeCustomBg: "自訂背景",
-    customBgInput: "背景圖片 URL",
-    customBgPlaceholder: "輸入圖片連結，留空則使用預設漸層背景",
-    customBgReset: "清除背景",
-    customBgLocalOnly: "僅本地可見，不上傳雲端",
-    customBgLocalFile: "本機檔案",
-    customBgSort: "排序",
-    customBgSortTime: "上傳時間",
-    customBgSortName: "檔名",
-    customBgEmpty: "尚無背景，點擊\"+\"按鈕新增",
-    customBgAddNew: "新增檔案",
-    or: "或",
-    confirm: "確定",
-    language: "語言",
-    clockFormat: "時間制式",
-    h12: "12 小時制",
-    h24: "24 小時制",
-    logout: "登出",
-    login: "登入",
-    account: "帳號",
-    register: "註冊",
-    email: "電子郵件",
-    username: "使用者名稱",
-    password: "密碼",
-    confirmPassword: "確認密碼",
-    close: "關閉",
-    addTask: "新增任務",
-    save: "儲存",
-    all: "全部",
-    active: "進行中",
-    done: "已完成",
-    labelFilter: "標籤篩選",
-    labelFilterAll: "全部標籤",
-    labelFilterNoLabel: "無標籤",
-    labelFilterSelected: "已選標籤",
-    noTask: "暫無任務",
-    allDone: "🎉🎉🎉 所有任務均已完成！好好休息一下吧！🎉🎉🎉",
-    edit: "編輯",
-    remove: "刪除",
-    pendingSummary: "您還有",
-    pendingSuffix: "個任務待完成，預計",
-    hourUnit: "小時",
-    durationHourUnit: "小時",
-    durationMinuteUnit: "分鐘",
-    durationSecondUnit: "秒",
-    localOnly: "Supabase 未連線，目前僅本地模式。",
-    notLoginLocal: "未登入，使用本地模式。",
-    syncFallback: "雲同步失敗，已退回本地。",
-    addFallback: "雲端新增失敗，已寫入本地。",
-    updateRollback: "更新失敗，已回滾。",
-    deleteRollback: "刪除失敗，已回滾。",
-    supabaseMissing: "Supabase 未連線。",
-    invalidLogin: "請輸入有效電子郵件與密碼。",
-    loginFailed: "登入失敗，請檢查電子郵件或密碼。",
-    loginSuccess: "登入成功。",
-    invalidEmail: "請輸入有效電子郵件地址。",
-    invalidUsername: "使用者名稱需為 1-15 個字元，可包含中文、大小寫與任意符號。",
-    shortPassword: "密碼至少 6 碼。",
-    passwordMismatch: "兩次密碼不一致。",
-    usernameTaken: "使用者名稱已存在。",
-    registerFailed: "註冊失敗",
-    registerSuccess: "註冊成功。",
-    registerNeedEmailCfg: "驗證碼已傳送至電子郵件，請輸入郵件中的 6 位驗證碼完成註冊。",
-    otpModalTitle: "電子郵件驗證",
-    otpSentIntro: "驗證碼已傳送至",
-    otpSentOutro: "，請輸入郵件中的 6 位驗證碼。",
-    otpCodePlaceholder: "6 位驗證碼",
-    otpVerify: "驗證",
-    otpInvalid: "請輸入驗證碼。",
-    otpFailed: "驗證碼無效或已過期",
-    registerVerified: "電子郵件驗證成功，已登入。",
-    authRateLimitHint: "驗證郵件傳送過於頻繁，請稍後再試。",
-    cancel: "取消",
-    addTaskSubmit: "新增",
-    addSuccess: "任務已新增。",
-    duplicateTaskTitle: "偵測到重複任務",
-    duplicateTaskMessage: "已存在相同標題與截止時間的任務。仍要新增嗎？",
-    duplicateTaskConfirm: "仍然新增",
-    viewNormal: "預設檢視",
-    viewByDue: "截止排序",
-    viewByPriority: "優先級排序",
-    viewCalendar: "日曆檢視",
-    viewDueNoDdl: "未設定截止時間（依建立時間）",
-    viewDueHasDdl: "已設定截止時間（依截止時間）",
-    calendarPrev: "上月",
-    calendarNext: "下月",
-    calendarWeekdays: ["日", "一", "二", "三", "四", "五", "六"],
-    calendarSideTitle: "當天任務",
-    calendarNoTasks: "當天暫無任務",
-    calendarDragHint: "可將任務拖到日期格，快速調整日期。",
-    addFieldTitle: "標題",
-    planWork: "自動規劃",
-    planWorkTitle: "工作時間自動規劃",
-    planAvailableHours: "接下來可工作的時長（小時）",
-    planHoursPlaceholder: "例如：2.5",
-    planGenerate: "產生建議",
-    planInvalidHours: "請輸入大於 0 的可用時長（小時）。",
-    planNoActiveTasks: "沒有可參與自動規劃的任務：請先填寫預計小時。",
-    planSummary: "僅包含已填寫預計時長的進行中任務；已依截止時間與優先級排序，建議如下：",
-    planNothingPacked: "未能安排任何任務，請檢查可用時長或任務列表。",
-    planSuggestWork: "建議投入",
-    planFullEstimate: "預計總需",
-    planInferredHours: "工時為推測值（無預計時長時依截止/優先級估算）",
-    planPartial: "本時段內時間不足以完成全部",
-    planTimeRemaining: "尚未分配完的剩餘時間",
-    emptyTitle: "請填寫任務標題。",
-    editTask: "編輯任務",
-    saveChanges: "儲存",
-    addTaskHintTitle: "新增任務規則說明",
-    addTaskHint: "· 標題為必填。\n· 預計小時、截止時間、優先級皆為選填。\n· 自動規劃只會納入已填寫預計小時的任務。\n· 截止時間和優先級會影響自動規劃中的排序。",
-    tagAddNew: "＋新增",
-    newTagPrompt: "新標籤名稱",
-    tagNone: "無",
-    progress: "進度",
-    remHours: "預計剩餘時長",
-    remarkPrefix: "備註: ",
-    taskComplete: "完成",
-    taskCompletedState: "已完成",
-    taskReopen: "退回",
-    deleteTask: "刪除任務",
-    confirmDeleteTitle: "確認刪除",
-    confirmDeleteMessage: "確定要刪除此任務嗎？此操作無法復原。",
-    confirmDelete: "確認刪除",
-    tagModalTitle: "新增標籤",
-    tagModalConfirm: "新增",
-    planAlgorithmAria: "自動規劃演算法說明",
-    planAlgorithmHint:
-      "演算法步驟：\n1. 只納入「進行中」且已填寫預計時長的任務。\n2. 依截止時間由早到晚排序；無截止時間排在後面；同一截止時間內依優先級數字由小到大，0（未指定）放最後。\n3. 直接使用任務中填寫的預計時長，不再推測工時。\n4. 依上述順序將任務依次裝入你輸入的可用時長，直至時間用完或沒有可裝任務。",
-    profileSettings: "個人資料設定",
-    emailBoundLabel: "已綁定電子郵件",
-    dataStats: "數據統計",
-    dataStatsTitle: "數據統計",
-    allTimeStats: "累計統計",
-    weekStats: "最近一週",
-    completedTasks: "已完成任務",
-    totalHours: "任務時長",
-    estimatedHoursStat: "預估時長",
-    pomodoroHoursStat: "番茄鐘時長",
-    pomodoroManage: "番茄鐘管理",
-    pomodoroManageTitle: "番茄鐘管理",
-    pomodoroManageHint: "可在此修改已記錄時長或刪除記錄。單一任務番茄鐘時長上限為 5 小時。",
-    pomodoroManageEmpty: "暫無番茄鐘記錄。",
-    pomodoroDuration: "時長",
-    pomodoroMinutes: "分鐘",
-    pomodoroDateLabel: "日期",
-    pomodoroDateConfirm: "確定",
-    pomodoroNoRecordsForDate: "該日期暫無記錄。",
-    pomodoroLimitReached: "已達番茄鐘上限 5 小時，計時已強制停止。",
-    pomodoroOnlyOne: "只能同時運行一個番茄鐘",
-    pomodoroRecordUpdated: "番茄鐘記錄已更新。",
-    pomodoroRecordDeleted: "番茄鐘記錄已刪除。",
-    manageLabels: "管理標籤",
-    tagValidationEmpty: "標籤不能為空",
-    tagValidationTooLong: "標籤長度不能超過20個字符",
-    tagValidationDuplicate: "標籤已存在",
-    noLabels: "暫無標籤",
-    taskLabelsUpdated: "標籤已儲存",
-    taskLabelDeleted: "標籤已刪除",
-    taskLabelDeleteInUse: "部分標籤仍被任務使用，已保留在標籤庫",
-    labelDeleteConfirmTitle: "刪除被占用標籤",
-    labelDeleteConfirmMessagePrefix: "標籤",
-    labelDeleteConfirmMessageSuffix: "正在被部分任務使用。繼續刪除將清空這些任務的標籤欄位，任務本身不會刪除。",
-    labelDeleteConfirmUsageCount: "目前占用任務數：{count}",
-    labelDeleteConfirmContinue: "繼續刪除",
-    statsDescription: "累計已完成的任務統計。最近一週基於過去7天內完成的任務。",
-    recordedTime: "已計時",
-    updateEmail: "變更電子郵件",
-    updateUsername: "變更使用者名稱",
-    resetPassword: "重設密碼",
-    updateEmailSuccess: "電子郵件更新請求已送出，請前往信箱確認。",
-    updateUsernameSuccess: "使用者名稱更新成功。",
-    resetPasswordSent: "密碼重設郵件已送出，請查收。",
-    usernameDbConstraintHint: "資料庫仍使用舊的使用者名稱規則，請先執行 supabase/profiles_username_constraint_migration.sql。",
-    usernameUnchanged: "使用者名稱未變更。",
-    actionNeedLogin: "請先登入後再操作。",
-    requestTimeout: "請求逾時，請重試。",
-    autoSyncLabel: "自動同步",
-    autoSyncOn: "開啟",
-    autoSyncOff: "關閉",
-    autoSyncEnabledNotice: "自動同步已開啟（每5分鐘）。",
-    autoSyncDisabledNotice: "自動同步已關閉。",
-    syncSuccess: "同步成功。",
-    syncNeedLogin: "目前會話不可用，請重新登入後再同步。",
-    syncFailed: "同步失敗",
-    autoSyncSuccessNotice: "自動同步成功。",
-    syncBusyPrefix: "同步被占用，目前持有者",
-    syncing: "同步中...",
-    editTaskSuccess: "編輯任務成功。",
-    syncNow: "雲端同步",
-    submitting: "提交中...",
-    migrateLocalTitle: "偵測到本機資料",
-    migrateLocalMessage: "目前帳號雲端任務為空，但本機有任務。要將本機任務、背景與偏好遷移到此帳號嗎？",
-    migrateLocalConfirm: "遷移並清理本機",
-    migrateLocalSuccess: "本機資料已遷移到目前帳號。",
-    migrateLocalFailed: "遷移失敗",
-    editPrompt: "編輯任務",
-    titlePlaceholder: "任務標題",
-    estHours: "預計任務時長",
-    dueAt: "截止時間",
-    dueTimeDefaultHint: "若時間欄留空則預設為當日23:59。",
-    label: "標籤",
-    priority: "優先級",
-    priorityOpt0: "0（未指定）",
-    priorityOpt1: "1（最優先）",
-    priorityOpt2: "2（次優先）",
-    priorityOpt3: "3（不是很優先）",
-    repeat: "重複",
-    repeatNone: "不重複",
-    repeatDaily: "每天",
-    repeatWeekly: "每週",
-    repeatMonthly: "每月",
-    repeatUntilDate: "重複截止日期",
-    repeatUntilHint: "最多重複 30 次（含目前任務）。",
-    repeatNextPreview: "下次生成時間",
-    repeatNextPreviewEmpty: "請先設定截止日期與重複規則。",
-    repeatUntilRequired: "請設定重複截止日期。",
-    repeatUntilBeforeStart: "重複截止日期不能早於開始日期。",
-    repeatUntilMaxDaysError: "重複次數最多 30 次。",
-    recurrenceCreateFallback: "重複任務已新增到本機，雲端寫入失敗。",
-    aboutUs: "關於我們",
-    aboutSummary: "TaskEase 是一個現代化任務管理網頁，幫助你更有效率地安排每日工作。",
-    aboutFeatureAuth: "支援帳號註冊登入與個人資料隔離。",
-    aboutFeatureCalendar: "提供日曆檢視與拖曳改期。",
-    aboutFeatureRecurring: "支援每日/每週/每月重複任務。",
-    aboutFeatureSync: "支援本機儲存與 Supabase 雲端同步。",
-    aboutFeatureI18n: "支援簡體中文、繁體中文與英文。",
-    aboutRepo: "GitHub 倉庫",
-    remark: "備註",
-    weekdays: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
-  },
   en: {
-    appTitle: "TaskEase",
     settings: "Settings",
-    themePalette: "Theme",
-    themeBeige: "Beige",
-    themePink: "Pink",
-    themeBlue: "Light Blue",
-    themeLavender: "Lavender",
-    themeCustomBg: "Custom BG",
-    customBgInput: "Background image URL",
-    customBgPlaceholder: "Paste an image URL, or leave empty for default gradient",
-    customBgReset: "Clear background",
-    customBgLocalOnly: "Local only, not uploaded to cloud",
-    customBgLocalFile: "Local file",
-    customBgSort: "Sort",
-    customBgSortTime: "Upload time",
-    customBgSortName: "File name",
-    customBgEmpty: "No backgrounds yet. Click \"+\" to add one.",
-    customBgAddNew: "Add file",
-    or: "or",
     confirm: "Confirm",
+    add: "Add",
+    delete: "Delete",
+    themeLabel: "Appearance",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeSystem: "System",
+    loadingData: "Loading data…",
+    dataLocation: "Data location",
+    dataBackup: "Data & Backup",
+    dataLocationDesktop: "SQLite database (stored in the Windows AppData folder)",
+    dataLocationWeb: "Browser local storage (localStorage)",
+    datePlaceholder: "yyyy/mm/dd",
+    backupSection: "Backup",
+    backupHint: "The backup is a readable JSON file containing all tasks, Pomodoro sessions and labels.",
+    backupRestoreHint: "You can save the backup anywhere; use “Import backup” to restore it.",
+    exportBackup: "Export backup",
+    exportBackupSuccess: "Backup exported.",
+    exportBackupFailed: "Failed to export backup.",
+    importBackup: "Import backup",
+    importBackupConfirmTitle: "Import backup?",
+    importBackupConfirmMessage: "Importing overwrites all current tasks, Pomodoro sessions and labels. This cannot be undone. Export your current data first.",
+    importBackupConfirm: "Import",
+    importBackupSuccess: "Imported:",
+    importBackupFailed: "Failed to import backup.",
+    unitTasks: "tasks",
+    unitSessions: "sessions",
     language: "Language",
     clockFormat: "Clock Format",
-    h12: "12-hour",
-    h24: "24-hour",
-    logout: "Logout",
-    login: "Login",
-    account: "Account",
-    register: "Register",
-    email: "Email",
-    username: "Username",
-    password: "Password",
-    confirmPassword: "Confirm Password",
     close: "Close",
     addTask: "Add Task",
     save: "Save",
@@ -1021,7 +620,6 @@ const TEXT = {
     labelFilter: "Filter by Label",
     labelFilterAll: "All Labels",
     labelFilterNoLabel: "No Label",
-    labelFilterSelected: "Selected Labels",
     noTask: "No tasks",
     allDone: "🎉🎉🎉 All tasks are completed! Take a good break! 🎉🎉🎉",
     edit: "Edit",
@@ -1032,33 +630,6 @@ const TEXT = {
     durationHourUnit: "h",
     durationMinuteUnit: "m",
     durationSecondUnit: "s",
-    localOnly: "Supabase unavailable. Local mode only.",
-    notLoginLocal: "Not logged in, using local mode.",
-    syncFallback: "Cloud sync failed. Falling back to local.",
-    addFallback: "Cloud add failed. Saved locally.",
-    updateRollback: "Update failed and rolled back.",
-    deleteRollback: "Delete failed and rolled back.",
-    supabaseMissing: "Supabase unavailable.",
-    invalidLogin: "Please enter a valid email and password.",
-    loginFailed: "Login failed. Check email/password.",
-    loginSuccess: "Login successful.",
-    invalidEmail: "Please enter a valid email address.",
-    invalidUsername: "Username must be 1-15 characters. Any characters are allowed.",
-    shortPassword: "Password must be at least 6 characters.",
-    passwordMismatch: "Passwords do not match.",
-    usernameTaken: "Username already exists.",
-    registerFailed: "Registration failed",
-    registerSuccess: "Registration successful.",
-    registerNeedEmailCfg: "We sent a code to your email. Enter the 6-digit code from the email to finish signing up.",
-    otpModalTitle: "Email verification",
-    otpSentIntro: "We sent a code to",
-    otpSentOutro: ". Enter the 6-digit code from the email.",
-    otpCodePlaceholder: "6-digit code",
-    otpVerify: "Verify",
-    otpInvalid: "Please enter the verification code.",
-    otpFailed: "Invalid or expired code",
-    registerVerified: "Email verified. You are signed in.",
-    authRateLimitHint: "Too many verification emails were sent. Please wait and try again.",
     cancel: "Cancel",
     addTaskSubmit: "Add",
     addSuccess: "Task added.",
@@ -1116,8 +687,6 @@ const TEXT = {
     planAlgorithmAria: "Auto-plan algorithm",
     planAlgorithmHint:
       "How it works:\n1. Only active tasks with estimated hours filled in.\n2. Sort by earliest due time first; tasks without a due time go last; tie-break by lower priority number, with 0 (unspecified) last.\n3. Use the entered estimated hours directly; no inference is applied.\n4. Greedily pack tasks into your available time budget in that order until time runs out.",
-    profileSettings: "Profile Settings",
-    emailBoundLabel: "Bound Email",
     dataStats: "Data Statistics",
     dataStatsTitle: "Data Statistics",
     allTimeStats: "All Time",
@@ -1130,10 +699,7 @@ const TEXT = {
     pomodoroManageTitle: "Pomodoro Manager",
     pomodoroManageHint: "Edit tracked time or delete records here. Per-task Pomodoro tracking is capped at 5 hours.",
     pomodoroManageEmpty: "No Pomodoro records yet.",
-    pomodoroDuration: "Duration",
-    pomodoroMinutes: "min",
     pomodoroDateLabel: "Date",
-    pomodoroDateConfirm: "Filter",
     pomodoroNoRecordsForDate: "No records for this date.",
     pomodoroLimitReached: "Pomodoro hit the 5-hour limit and was stopped automatically.",
     pomodoroOnlyOne: "Only one Pomodoro can run at a time",
@@ -1146,7 +712,6 @@ const TEXT = {
     noLabels: "No labels yet",
     taskLabelsUpdated: "Labels saved",
     taskLabelDeleted: "Label deleted",
-    taskLabelDeleteInUse: "Some labels are still used by tasks and were kept",
     labelDeleteConfirmTitle: "Delete Label In Use",
     labelDeleteConfirmMessagePrefix: "Label",
     labelDeleteConfirmMessageSuffix: "is used by some tasks. Continue will clear this label from those tasks, without deleting task rows.",
@@ -1154,36 +719,8 @@ const TEXT = {
     labelDeleteConfirmContinue: "Continue Deletion",
     statsDescription: "Statistics on all completed tasks. This week counts tasks completed in the past 7 days.",
     recordedTime: "Tracked",
-    updateEmail: "Change Email",
-    updateUsername: "Change Username",
-    resetPassword: "Reset Password",
-    updateEmailSuccess: "Email update request sent. Please confirm in your mailbox.",
-    updateUsernameSuccess: "Username updated successfully.",
-    resetPasswordSent: "Password reset email sent. Please check your mailbox.",
-    usernameDbConstraintHint: "Database is still using old username constraint. Please run supabase/profiles_username_constraint_migration.sql first.",
-    usernameUnchanged: "Username is unchanged.",
-    actionNeedLogin: "Please login first.",
-    requestTimeout: "Request timed out. Please try again.",
-    autoSyncLabel: "Auto Sync",
-    autoSyncOn: "On",
-    autoSyncOff: "Off",
-    autoSyncEnabledNotice: "Auto sync enabled (every 5 minutes).",
-    autoSyncDisabledNotice: "Auto sync disabled.",
-    syncSuccess: "Sync completed.",
-    syncNeedLogin: "Session is invalid. Please sign in again before syncing.",
-    syncFailed: "Sync failed",
-    autoSyncSuccessNotice: "Auto sync successful.",
-    syncBusyPrefix: "Sync is locked by",
-    syncing: "Syncing...",
     editTaskSuccess: "Task edited successfully.",
-    syncNow: "Cloud sync",
     submitting: "Submitting...",
-    migrateLocalTitle: "Local Data Found",
-    migrateLocalMessage: "This account has no cloud tasks, but local tasks exist. Move local tasks, background, and preferences into this account?",
-    migrateLocalConfirm: "Migrate and Clear Local",
-    migrateLocalSuccess: "Local data migrated to this account.",
-    migrateLocalFailed: "Migration failed",
-    editPrompt: "Edit task",
     titlePlaceholder: "Task title",
     estHours: "Estimated task duration",
     dueAt: "Due time",
@@ -1206,147 +743,70 @@ const TEXT = {
     repeatUntilRequired: "Please set a repeat end date.",
     repeatUntilBeforeStart: "Repeat end date cannot be earlier than start date.",
     repeatUntilMaxDaysError: "Repeat occurrences can be at most 30.",
-    recurrenceCreateFallback: "Recurring task added locally, cloud insert failed.",
     aboutUs: "About",
-    aboutSummary: "TaskEase is a modern task management web app that helps you organize daily work efficiently.",
-    aboutFeatureAuth: "Account sign up/login with per-user data isolation.",
+    aboutSummary: "TaskEase is a local-first desktop app for task management and Pomodoro tracking. All data stays on your own machine — no account, no internet required.",
     aboutFeatureCalendar: "Calendar view with drag-to-reschedule.",
     aboutFeatureRecurring: "Daily/weekly/monthly recurring tasks.",
     aboutFeatureSync: "Local storage with optional Supabase cloud sync.",
-    aboutFeatureI18n: "Supports Simplified Chinese, Traditional Chinese, and English.",
+    aboutFeatureI18n: "Supports Simplified Chinese and English.",
     aboutRepo: "GitHub Repository",
     remark: "Remark",
     weekdays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
   },
 };
 
-const supabase = buildSupabaseClient();
+/**
+ * 持久化辅助：全部委托给 src/storage 适配器。
+ * 桌面版落到 SQLite 文件，网页版落到 localStorage，业务代码无感知。
+ */
+let storageErrorHandler = null;
 
-function buildSupabaseClient() {
-  const valid = /^https:\/\/.+\.supabase\.co$/i.test(SUPABASE_URL.trim()) && SUPABASE_KEY.trim();
-  if (!valid) return null;
-  try {
-    const globalScope = globalThis;
-    if (globalScope[SUPABASE_SINGLETON_KEY]) {
-      return globalScope[SUPABASE_SINGLETON_KEY];
-    }
-
-    const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: {
-        storageKey: "taskease-auth-token",
-      },
-    });
-
-    globalScope[SUPABASE_SINGLETON_KEY] = client;
-    return client;
-  } catch {
-    return null;
-  }
+function reportStorageError(scope, error) {
+  console.error(`[storage] ${scope}失败`, error);
+  if (typeof storageErrorHandler === "function") storageErrorHandler(scope, error);
 }
 
-function normalizeUsername(name) {
-  return String(name || "").trim();
-}
-
-function isValidUsername(name) {
-  const value = String(name || "").trim();
-  const length = Array.from(value).length;
-  return length >= 1 && length <= 15;
-}
-
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
-}
-
-function isAuthRateLimitError(error) {
-  if (!error) return false;
-  const status = Number(error.status);
-  if (status === 429) return true;
-  const msg = String(error.message || "").toLowerCase();
-  const code = String(error.code || "").toLowerCase();
-  if (code.includes("over_email") || code.includes("rate") || code === "too_many_requests") return true;
-  if (
-    msg.includes("rate limit") ||
-    msg.includes("too many requests") ||
-    msg.includes("too many") ||
-    msg.includes("email rate limit") ||
-    msg.includes("seconds before") ||
-    msg.includes("security purposes")
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function isTransientLockError(error) {
-  const message = String(error?.message || "");
-  return (
-    message.includes("Lock broken by another request") ||
-    message.includes("AbortError") ||
-    message.includes("NavigatorLockAcquireTimeoutError") ||
-    message.includes("was not released within") ||
-    message.includes("lock:")
-  );
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function withLockRetry(task, retries = 1, waitMs = 220) {
-  try {
-    return await task();
-  } catch (error) {
-    if (retries > 0 && isTransientLockError(error)) {
-      await sleep(waitMs);
-      return withLockRetry(task, retries - 1, waitMs);
-    }
-    throw error;
-  }
-}
-
-function withTimeout(promise, ms = 10000) {
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+function persistTodos(list) {
+  return storage.saveTodos(list).catch((error) => {
+    reportStorageError("任务写入", error);
+    return false;
   });
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
-function readLocalTodos(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => {
-      const parsedRepeat = parseLegacyRepeatFromRemark(item?.remark ?? "");
-      return {
-        ...item,
-        remark: sanitizeRemark(item?.remark ?? ""),
-        repeat_rule: normalizeRepeatRule(item?.repeat_rule ?? parsedRepeat.repeat_rule),
-        repeat_until_date: normalizeRepeatUntilDate(item?.repeat_until_date ?? parsedRepeat.repeat_until_date),
-        pomodoro_total_seconds: Math.max(0, Number(item?.pomodoro_total_seconds ?? 0)),
-        progress_percent: normalizeProgress(item?.progress_percent),
-        estimated_hours: Number(item?.estimated_hours ?? 0),
-        priority: Number(item?.priority ?? 0),
-      };
-    });
-  } catch {
-    return [];
-  }
+function persistSessions(list) {
+  return storage.saveSessions(list).catch((error) => {
+    reportStorageError("番茄钟写入", error);
+    return false;
+  });
 }
 
-function writeLocalTodos(key, todos) {
-  localStorage.setItem(key, JSON.stringify(todos));
-}
-function getPomodoroSessionsStorageKey(userId) {
-  const id = String(userId || "").trim();
-  return id ? `taskease_pomodoro_sessions_${id}` : GUEST_POMODORO_SESSIONS_KEY;
+function persistSessionDeletion(id) {
+  return storage.deleteSession(id).catch((error) => {
+    reportStorageError("番茄钟删除", error);
+    return false;
+  });
 }
 
-function getPomodoroDeletedStorageKey(userId) {
-  const id = String(userId || "").trim();
-  return id ? `taskease_pomodoro_sessions_deleted_${id}` : GUEST_POMODORO_DELETED_KEY;
+function persistTaskLabels(list) {
+  return storage.saveTaskLabels(list).catch((error) => {
+    reportStorageError("标签写入", error);
+    return false;
+  });
+}
+
+/** 从存储读出的任务需要做一次兼容性归一化（历史版本把重复规则塞在 remark 里） */
+function normalizeStoredTodo(item) {
+  const parsedRepeat = parseLegacyRepeatFromRemark(item?.remark ?? "");
+  return {
+    ...item,
+    remark: sanitizeRemark(item?.remark ?? ""),
+    repeat_rule: normalizeRepeatRule(item?.repeat_rule ?? parsedRepeat.repeat_rule),
+    repeat_until_date: normalizeRepeatUntilDate(item?.repeat_until_date ?? parsedRepeat.repeat_until_date),
+    pomodoro_total_seconds: Math.max(0, Number(item?.pomodoro_total_seconds ?? 0)),
+    progress_percent: normalizeProgress(item?.progress_percent),
+    estimated_hours: Number(item?.estimated_hours ?? 0),
+    priority: Number(item?.priority ?? 0),
+  };
 }
 
 function mapPomodoroSession(row) {
@@ -1369,78 +829,12 @@ function mapPomodoroSession(row) {
   };
 }
 
-function isCloudPomodoroSessionId(value) {
-  const id = String(value || "").trim();
-  return /^\d+$/.test(id);
-}
-
-function readLocalPomodoroSessions(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return dedupePomodoroSessionList(parsed)
-      .map(mapPomodoroSession)
-      .filter((item) => item && item.id)
-      .sort((a, b) => toTs(b.start_time) - toTs(a.start_time));
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalPomodoroSessions(key, sessions) {
-  localStorage.setItem(key, JSON.stringify(dedupePomodoroSessionList(Array.isArray(sessions) ? sessions : [])));
-}
-
-function readLocalPomodoroDeletedSessionIds(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((id) => String(id || "").trim()).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalPomodoroDeletedSessionIds(key, ids) {
-  const uniqueIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean)));
-  localStorage.setItem(key, JSON.stringify(uniqueIds));
-}
-
-async function loadCloudPomodoroTombstoneSessionIds(userId) {
-  if (!supabase || !userId) return [];
-  const { data, error } = await supabase
-    .from(POMODORO_SESSION_TOMBSTONES_TABLE)
-    .select("session_id")
-    .eq("user_id", userId);
-
-  if (error) {
-    return [];
-  }
-
-  return (Array.isArray(data) ? data : [])
-    .map((row) => String(row?.session_id || "").trim())
-    .filter(Boolean);
-}
-
-async function loadPomodoroTombstoneSessionIds(userId) {
-  const localIds = readLocalPomodoroDeletedSessionIds(getPomodoroDeletedStorageKey(userId));
-  const cloudIds = await loadCloudPomodoroTombstoneSessionIds(userId);
-  return Array.from(new Set([...localIds, ...cloudIds]));
-}
-
-function addLocalPomodoroDeletedSessionId(userId, sessionId) {
-  const key = getPomodoroDeletedStorageKey(userId);
-  const next = readLocalPomodoroDeletedSessionIds(key);
-  next.push(String(sessionId || "").trim());
-  writeLocalPomodoroDeletedSessionIds(key, next);
-}
-
-function removeLocalPomodoroDeletedSessionId(userId, sessionId) {
-  const key = getPomodoroDeletedStorageKey(userId);
-  const next = readLocalPomodoroDeletedSessionIds(key).filter((id) => id !== String(sessionId || "").trim());
-  writeLocalPomodoroDeletedSessionIds(key, next);
+/** 从存储读出的番茄钟会话：去重 + 映射 + 按开始时间倒序 */
+function normalizeStoredSessions(list) {
+  return dedupePomodoroSessionList(Array.isArray(list) ? list : [])
+    .map(mapPomodoroSession)
+    .filter((item) => item && item.id)
+    .sort((a, b) => toTs(b.start_time) - toTs(a.start_time));
 }
 
 function buildPomodoroTotalsByTaskId(sessions) {
@@ -1455,82 +849,6 @@ function buildPomodoroTotalsByTaskId(sessions) {
 
 function applyPomodoroTotalsFromSessions(todoList, sessions) {
   return applyPomodoroTotals(todoList, buildPomodoroTotalsByTaskId(sessions));
-}
-
-function mergePomodoroSessionLists(...lists) {
-  return dedupePomodoroSessionList(lists.flatMap((list) => (Array.isArray(list) ? list : [])));
-}
-
-function getLastSyncAt(userId) {
-  const id = String(userId || "").trim();
-  if (!id) return "";
-  return String(localStorage.getItem(`${LAST_SYNC_AT_KEY_PREFIX}${id}`) || "").trim();
-}
-
-function setLastSyncAt(userId, value) {
-  const id = String(userId || "").trim();
-  const ts = String(value || "").trim();
-  if (!id || !ts) return;
-  localStorage.setItem(`${LAST_SYNC_AT_KEY_PREFIX}${id}`, ts);
-}
-
-function readAllLocalTodos() {
-  try {
-    const keys = [];
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (!key) continue;
-      if (key === GUEST_KEY || key.startsWith("taskease_todos_")) keys.push(key);
-    }
-    return mergeTodoLists(...keys.map((key) => readLocalTodos(key)));
-  } catch {
-    return [];
-  }
-}
-
-function getPendingUsernameByEmail(email) {
-  const normalized = String(email || "").trim().toLowerCase();
-  if (!normalized) return "";
-  return localStorage.getItem(`${PENDING_USERNAME_KEY_PREFIX}${normalized}`) || "";
-}
-
-function setPendingUsernameByEmail(email, username) {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-  const normalizedUsername = String(username || "").trim();
-  if (!normalizedEmail || !normalizedUsername) return;
-  localStorage.setItem(`${PENDING_USERNAME_KEY_PREFIX}${normalizedEmail}`, normalizedUsername);
-}
-
-function clearPendingUsernameByEmail(email) {
-  const normalized = String(email || "").trim().toLowerCase();
-  if (!normalized) return;
-  localStorage.removeItem(`${PENDING_USERNAME_KEY_PREFIX}${normalized}`);
-}
-
-function getCachedUsernameByUserId(userId) {
-  const id = String(userId || "").trim();
-  if (!id) return "";
-  return String(localStorage.getItem(`${USERNAME_CACHE_KEY_PREFIX}${id}`) || "").trim();
-}
-
-function setCachedUsernameByUserId(userId, username) {
-  const id = String(userId || "").trim();
-  const name = String(username || "").trim();
-  if (!id || !name) return;
-  localStorage.setItem(`${USERNAME_CACHE_KEY_PREFIX}${id}`, name);
-}
-
-function resolveFastUsername(currentUser) {
-  const cached = getCachedUsernameByUserId(currentUser?.id);
-  if (cached) return cached;
-
-  const metaName = normalizeUsername(currentUser?.user_metadata?.username || "");
-  if (isValidUsername(metaName)) return metaName;
-
-  const pendingName = normalizeUsername(getPendingUsernameByEmail(currentUser?.email || ""));
-  if (isValidUsername(pendingName)) return pendingName;
-
-  return "user";
 }
 
 function snapProgress(v) {
@@ -1695,32 +1013,9 @@ function applyPomodoroTotals(todoList, totalsByTaskId) {
   });
 }
 
-function isTodoLocallyDirtyOrNew(todo, lastSyncAt) {
-  if (!todo || typeof todo !== "object") return false;
-  if (todo.status === STATUS_DELETED) return true;
-  if (todo.local_dirty) return true;
-  const localUpdatedAt = String(todo.local_updated_at || "").trim();
-  if (localUpdatedAt && (!lastSyncAt || localUpdatedAt > lastSyncAt)) return true;
-  const createdAt = String(todo.created_at || "").trim();
-  if (createdAt && (!lastSyncAt || createdAt > lastSyncAt)) return true;
-  return false;
-}
-
 function toTs(value, fallback = 0) {
   const ts = new Date(value || "").getTime();
   return Number.isFinite(ts) ? ts : fallback;
-}
-
-function mergeTodoLists(...lists) {
-  const merged = new Map();
-  for (const list of lists) {
-    if (!Array.isArray(list)) continue;
-    for (const todo of list) {
-      if (!todo || !todo.id) continue;
-      merged.set(todo.id, { ...merged.get(todo.id), ...todo });
-    }
-  }
-  return Array.from(merged.values()).sort((a, b) => toTs(b.created_at) - toTs(a.created_at));
 }
 
 function getClockParts(now, lang, hourFormat) {
@@ -1737,42 +1032,28 @@ function getClockParts(now, lang, hourFormat) {
 }
 
 export default function App() {
-  const OP_TIMEOUT_MS = 10000;
   const SUBMIT_WATCHDOG_MS = 12000;
 
   const [lang, setLang] = useState(() => {
     const saved = localStorage.getItem(LANG_KEY);
-    if (saved === "zh-CN" || saved === "zh-TW" || saved === "en") return saved;
+    if (saved === "zh-CN" || saved === "en") return saved;
     return "zh-CN";
   });
   const [themeMode, setThemeMode] = useState(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
   });
-  const [themePreset, setThemePreset] = useState(() => {
-    const saved = localStorage.getItem(THEME_PRESET_KEY);
-    return saved === "beige" || saved === "pink" || saved === "blue" || saved === "lavender" || saved === "custom-bg"
-      ? saved
-      : "beige";
-  });
-  const [customBackground, setCustomBackground] = useState(() => localStorage.getItem(CUSTOM_BG_KEY) || "");
   const [clockFormat, setClockFormat] = useState(() => {
     const saved = localStorage.getItem(CLOCK_KEY);
     return saved === "12h" || saved === "24h" ? saved : "24h";
   });
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
-    const saved = localStorage.getItem(AUTO_SYNC_KEY);
-    return saved === "true";
-  });
-
   const [resolvedTheme, setResolvedTheme] = useState("light");
   const [now, setNow] = useState(() => new Date());
 
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPlanWorkModalOpen, setIsPlanWorkModalOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
   const [isDataStatsModalOpen, setIsDataStatsModalOpen] = useState(false);
   const [isPomodoroManageOpen, setIsPomodoroManageOpen] = useState(false);
   const [isPomodoroManageSaving, setIsPomodoroManageSaving] = useState(false);
@@ -1780,28 +1061,8 @@ export default function App() {
   const [isPomodoroSessionLoading, setIsPomodoroSessionLoading] = useState(false);
   const [isTaskLabelsModalOpen, setIsTaskLabelsModalOpen] = useState(false);
   const [taskLabels, setTaskLabels] = useState([]);
-  const [isMigratePromptOpen, setIsMigratePromptOpen] = useState(false);
-  const [activeAuthTab, setActiveAuthTab] = useState("login");
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isMigratingLocalData, setIsMigratingLocalData] = useState(false);
-
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [registerUsername, setRegisterUsername] = useState("");
-  const [registerEmail, setRegisterEmail] = useState("");
-  const [registerPassword, setRegisterPassword] = useState("");
-  const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
-
-  // OTP验证相关状态
-  const [otpEmail, setOtpEmail] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-
-  const [user, setUser] = useState(null);
-  const [username, setUsername] = useState("");
+  // 持久层就绪前不渲染主界面（桌面端涉及数据库加载）
+  const [storageReady, setStorageReady] = useState(false);
 
   const [notice, setNotice] = useState({ text: "", warning: false });
 
@@ -1828,21 +1089,9 @@ export default function App() {
   const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
   const [pendingDuplicatePayload, setPendingDuplicatePayload] = useState(null);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
-  const previousUserIdRef = useRef(null);
-  const authSyncSeqRef = useRef(0);
-  const autoSyncInFlightRef = useRef(false);
-  const syncGuardRef = useRef({ owner: "", startedAt: 0, token: "" });
-  const migrationPromptShownForUserRef = useRef(null);
-  const repeatColumnsSupportedRef = useRef(null);
-  const prefsReadyForAutoSaveRef = useRef(false);
-  const ignoreAuthEventsUntilRef = useRef(0);
-  const isLogoutInProgressRef = useRef(false);
-  const loadOrCreateUsernameRef = useRef(null);
-  const loadPomodoroTotalsForTodosRef = useRef(null);
   const loadPomodoroSessionsRef = useRef(null);
-  const performCloudSyncRef = useRef(null);
-  const savePreferencesRef = useRef(null);
-  const localOnlyNoticeRef = useRef("");
+  // 番茄钟会话的内存镜像：让事件处理函数能同步读到当前列表，无需为读数据再走一次磁盘
+  const sessionsRef = useRef([]);
 
   const [todos, setTodos] = useState([]);
   const [timerTaskId, setTimerTaskId] = useState(null);
@@ -1869,18 +1118,16 @@ export default function App() {
   }, [todos]);
 
   const t = TEXT[lang];
-  const storageKey = user ? `taskease_todos_${user.id}` : GUEST_KEY;
+  // 日期时间格式化统一用它，避免跟随系统语言导致中英混搭
+  const appLocale = getAppLocale(lang);
 
-  loadOrCreateUsernameRef.current = loadOrCreateUsername;
-  loadPomodoroTotalsForTodosRef.current = loadPomodoroTotalsForTodos;
   loadPomodoroSessionsRef.current = loadPomodoroSessions;
-  performCloudSyncRef.current = performCloudSync;
-  savePreferencesRef.current = savePreferences;
-  localOnlyNoticeRef.current = t.localOnly;
+  // 持久层出错时统一提示（避免静默丢数据）
+  storageErrorHandler = (scope, error) => {
+    setNotice({ text: `${scope}失败：${String(error?.message || error)}`, warning: true });
+  };
 
-  const isCustomBgTheme = themePreset === "custom-bg";
-  const paletteTone = isCustomBgTheme ? "light" : resolvedTheme;
-  const themeColors = getThemeColors(themePreset, paletteTone);
+  const themeColors = getThemeColors(resolvedTheme);
   const { pageBg, panelBg, listBg, logoColor } = themeColors;
 
   function notify(text, warning = true) {
@@ -1888,28 +1135,6 @@ export default function App() {
     window.setTimeout(() => {
       setNotice((prev) => (prev.text === text ? { text: "", warning: false } : prev));
     }, 4500);
-  }
-
-  function tryAcquireSyncGuard(source) {
-    const now = Date.now();
-    const current = syncGuardRef.current;
-    if (current?.token) {
-      return {
-        ok: false,
-        holder: current.owner || "unknown",
-        elapsedMs: Math.max(0, now - Number(current.startedAt || now)),
-        token: "",
-      };
-    }
-    const token = `${source}-${now}-${Math.random().toString(36).slice(2, 8)}`;
-    syncGuardRef.current = { owner: source, startedAt: now, token };
-    return { ok: true, holder: source, elapsedMs: 0, token };
-  }
-
-  function releaseSyncGuard(token) {
-    const current = syncGuardRef.current;
-    if (!current?.token || current.token !== token) return;
-    syncGuardRef.current = { owner: "", startedAt: 0, token: "" };
   }
 
   function pushDiag() {
@@ -1929,19 +1154,12 @@ export default function App() {
       return mode;
     }
 
-    const next = isCustomBgTheme ? "light" : resolve(themeMode);
+    const next = resolve(themeMode);
     setResolvedTheme(next);
     document.documentElement.setAttribute("data-bs-theme", next);
     localStorage.setItem(THEME_KEY, themeMode);
-  }, [themeMode, isCustomBgTheme]);
+  }, [themeMode]);
 
-  useEffect(() => {
-    localStorage.setItem(THEME_PRESET_KEY, themePreset);
-  }, [themePreset]);
-
-  useEffect(() => {
-    localStorage.setItem(CUSTOM_BG_KEY, customBackground);
-  }, [customBackground]);
 
   useEffect(() => {
     localStorage.setItem(LANG_KEY, lang);
@@ -1952,11 +1170,7 @@ export default function App() {
   }, [clockFormat]);
 
   useEffect(() => {
-    localStorage.setItem(AUTO_SYNC_KEY, autoSyncEnabled ? "true" : "false");
-  }, [autoSyncEnabled]);
-
-  useEffect(() => {
-    if (themeMode !== "system" || isCustomBgTheme) return;
+    if (themeMode !== "system") return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
       const next = media.matches ? "dark" : "light";
@@ -1965,181 +1179,54 @@ export default function App() {
     };
     media.addEventListener("change", handler);
     return () => media.removeEventListener("change", handler);
-  }, [themeMode, isCustomBgTheme]);
+  }, [themeMode]);
+
+  // 启动时从持久层加载全部数据（桌面版 = SQLite，网页版 = localStorage）。
+  // 在加载完成前不渲染主界面，从根本上避免「用户已改数据但初始加载把它覆盖掉」的竞态。
+  /** 把持久层里的全部数据读回内存（启动时与导入备份后都会调用） */
+  async function reloadFromStorage() {
+    const [todoRows, sessionRows, labelRows] = await Promise.all([
+      storage.loadTodos(),
+      storage.loadSessions(),
+      storage.loadTaskLabels(),
+    ]);
+    const sessions = normalizeStoredSessions(sessionRows);
+    const todos = (Array.isArray(todoRows) ? todoRows : []).map(normalizeStoredTodo);
+    const labels = parseTaskLabels(Array.isArray(labelRows) ? labelRows : []);
+
+    applySessions(sessions);
+    setTodos(applyPomodoroTotalsFromSessions(todos, sessions));
+    setTaskLabels(labels);
+    return { todos: todos.length, sessions: sessions.length, labels: labels.length };
+  }
 
   useEffect(() => {
-    if (!supabase) {
-      notify(localOnlyNoticeRef.current, true);
-      setTodos(readAllLocalTodos());
-      return;
-    }
+    let cancelled = false;
 
-    setTodos(readAllLocalTodos());
-
-    let mounted = true;
-
-    async function applySession(current, event = "UNKNOWN") {
-      const seq = ++authSyncSeqRef.current;
-      pushDiag("authSync", "start", { event, seq, hasUser: Boolean(current), userId: current?.id || null });
-
-      if (current && Date.now() < ignoreAuthEventsUntilRef.current) {
-        pushDiag("authSync", "ignored_during_forced_logout", { event, seq, userId: current.id }, "warn");
-        return;
-      }
-
-      setUser(current);
-
-      if (!current) {
-        pushDiag("authSync", "no_user_reset", { event, seq });
-        isLogoutInProgressRef.current = false;
-        ignoreAuthEventsUntilRef.current = 0;
-        setUsername("");
-        setTodos(readAllLocalTodos());
-        previousUserIdRef.current = null;
-        autoSyncInFlightRef.current = false;
-        prefsReadyForAutoSaveRef.current = false;
-        setIsMigratePromptOpen(false);
-        migrationPromptShownForUserRef.current = null;
-        return;
-      }
-
-      if (isLogoutInProgressRef.current) {
-        pushDiag("authSync", "ignored_logout_in_progress", { event, seq, userId: current.id }, "warn");
-        return;
-      }
-
-      const switchedUser = previousUserIdRef.current !== current.id;
-      if (switchedUser) {
-        previousUserIdRef.current = current.id;
-        prefsReadyForAutoSaveRef.current = false;
-      }
-
-      // Show a fast local username first so UI does not appear blank when cloud is slow.
-      const fastName = resolveFastUsername(current);
-      setUsername(fastName);
-      pushDiag("authSync", "username_fast_resolved", { seq, userId: current.id, fastName });
-
-      // Avoid repeating heavy profile/todo fetches on token refresh for same user.
-      if (!switchedUser && (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")) {
-        pushDiag("authSync", "skip_repeat_auth_event", { event, seq, userId: current.id });
-        return;
-      }
-
+    (async () => {
+      const startedAt = Date.now();
       try {
-        pushDiag("authSync", "username_load_start", { seq, userId: current.id });
-        const foundName = await withTimeout(loadOrCreateUsernameRef.current(current), OP_TIMEOUT_MS);
-        if (!mounted || seq !== authSyncSeqRef.current) return;
-        pushDiag("authSync", "username_load_success", { seq, userId: current.id, foundName: foundName || fastName || "user" });
-        setUsername(foundName || fastName || "user");
-      } catch (err) {
-        if (!mounted || seq !== authSyncSeqRef.current) return;
-        const isTimeout = String(err?.message || "") === "TIMEOUT";
-        pushDiag(
-          "authSync",
-          isTimeout ? "username_load_timeout" : "username_load_error",
-          { seq, userId: current.id, error: String(err?.message || err) },
-          "error",
+        await storage.init();
+        const counts = await reloadFromStorage();
+        if (cancelled) return;
+
+        console.info(
+          `[storage] 适配器=${storage.kind} 任务=${counts.todos} 会话=${counts.sessions} 标签=${counts.labels} 耗时=${Date.now() - startedAt}ms`,
         );
-        setUsername(fastName || "user");
-      }
-
-      try {
-        pushDiag("authSync", "preferences_load_start", { seq, userId: current.id });
-        await withTimeout(loadPreferences(current.id), OP_TIMEOUT_MS);
-        pushDiag("authSync", "preferences_load_success", { seq, userId: current.id });
-      } catch (err) {
-        const isTimeout = String(err?.message || "") === "TIMEOUT";
-        pushDiag(
-          "authSync",
-          isTimeout ? "preferences_load_timeout" : "preferences_load_error",
-          { seq, userId: current.id, error: String(err?.message || err) },
-          "warn",
-        );
-      }
-      prefsReadyForAutoSaveRef.current = true;
-
-      if (!mounted || seq !== authSyncSeqRef.current) return;
-
-      const localOnlyTodos = mergeTodoLists(readLocalTodos(`taskease_todos_${current.id}`), readLocalTodos(GUEST_KEY));
-      pushDiag("authSync", "todos_load_local_only", { seq, userId: current.id, count: localOnlyTodos.length });
-      const todosWithPomodoro = await withLockRetry(() => withTimeout(loadPomodoroTotalsForTodosRef.current(current.id, localOnlyTodos), OP_TIMEOUT_MS));
-      setTodos(todosWithPomodoro);
-      writeLocalTodos(`taskease_todos_${current.id}`, todosWithPomodoro);
-
-      // Load Pomodoro sessions in the background (no blocking)
-      try {
-        const sessions = await withTimeout(loadPomodoroSessionsRef.current(current.id), OP_TIMEOUT_MS);
-        if (mounted && seq === authSyncSeqRef.current) {
-          setPomodoroSessions(sessions);
-          pushDiag("authSync", "sessions_load_background_success", { seq, userId: current.id, count: sessions.length });
-        }
-      } catch (err) {
-        const isTimeout = String(err?.message || "") === "TIMEOUT";
-        pushDiag("authSync", isTimeout ? "sessions_load_background_timeout" : "sessions_load_background_error", { seq, userId: current.id, error: String(err?.message || "") }, "warn");
-      }
-
-      if (
-        localOnlyTodos.length === 0 &&
-        readLocalTodos(GUEST_KEY).length > 0 &&
-        migrationPromptShownForUserRef.current !== current.id
-      ) {
-        migrationPromptShownForUserRef.current = current.id;
-        setIsMigratePromptOpen(true);
-        pushDiag("migration", "prompt_open", { userId: current.id, guestCount: readLocalTodos(GUEST_KEY).length });
-      }
-
-      if (!mounted || seq !== authSyncSeqRef.current) return;
-      pushDiag("authSync", "done", { seq, userId: current.id });
-    }
-
-    async function initSession() {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!mounted) return;
-        await applySession(session?.user ?? null, "INITIAL_GET_SESSION");
       } catch (error) {
-        if (!mounted) return;
-        if (!isTransientLockError(error)) {
-          pushDiag("authSync", "init_session_error", { error: String(error?.message || error) }, "warn");
-        }
+        reportStorageError("初始化", error);
+        if (!cancelled) notify(`数据加载失败：${String(error?.message || error)}`, true);
+      } finally {
+        if (!cancelled) setStorageReady(true);
       }
-    }
-
-    initSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        await applySession(session?.user ?? null, event);
-      } catch (error) {
-        if (!isTransientLockError(error)) {
-          pushDiag("authSync", "auth_listener_error", { event, error: String(error?.message || error) }, "warn");
-        }
-      }
-    });
+    })();
 
     return () => {
-      mounted = false;
-      subscription.unsubscribe();
+      cancelled = true;
     };
+    // 只在挂载时执行一次：reloadFromStorage 仅依赖稳定的 setState 与 ref，无外部可变值
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    const key = getTaskLabelsStorageKey(user?.id);
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) {
-        setTaskLabels([]);
-        return;
-      }
-      setTaskLabels(parseTaskLabels(JSON.parse(raw)));
-    } catch {
-      setTaskLabels([]);
-    }
-  }, [user?.id]);
 
   useEffect(() => {
     const labelsFromTodos = extractTaskLabelsFromTodos(todos);
@@ -2154,25 +1241,8 @@ export default function App() {
     if (isUnchanged) return;
 
     setTaskLabels(merged);
-
-    try {
-      localStorage.setItem(getTaskLabelsStorageKey(user?.id), JSON.stringify(merged));
-    } catch {
-      /* ignore */
-    }
-
-  }, [todos, taskLabels, lang, user?.id]);
-
-  useEffect(() => {
-    if (!supabase || !user || !autoSyncEnabled) return;
-    const timer = window.setInterval(() => {
-      const sync = performCloudSyncRef.current;
-      if (typeof sync === "function") {
-        void sync("auto");
-      }
-    }, 5 * 60 * 1000);
-    return () => window.clearInterval(timer);
-  }, [user, autoSyncEnabled]);
+    void persistTaskLabels(merged);
+  }, [todos, taskLabels, lang]);
 
   const mergedTaskLabels = useMemo(() => {
     const fromTodos = todos
@@ -2182,24 +1252,6 @@ export default function App() {
     const set = new Set([...taskLabels.map((x) => String(x).trim()).filter(Boolean), ...fromTodos]);
     return Array.from(set).sort((a, b) => a.localeCompare(b, lang));
   }, [todos, taskLabels, lang]);
-
-  useEffect(() => {
-    if (!supabase || !user?.id) return;
-    if (!prefsReadyForAutoSaveRef.current) return;
-    const timer = window.setTimeout(() => {
-      const save = savePreferencesRef.current;
-      if (typeof save !== "function") return;
-      void save(user.id, {
-        language: lang,
-        clock_format: clockFormat,
-        theme_mode: themeMode,
-        auto_sync_enabled: autoSyncEnabled,
-        theme_preset: themePreset,
-        custom_background: customBackground,
-      });
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [user?.id, lang, clockFormat, themeMode, mergedTaskLabels, autoSyncEnabled, themePreset, customBackground]);
 
   const visibleTodos = useMemo(() => {
     return todos.filter((todo) => {
@@ -2232,462 +1284,19 @@ export default function App() {
 
   const clock = getClockParts(now, lang, clockFormat);
 
-  async function loadTodosForUser(userId, options = {}) {
-    const { includeLocal = true } = options;
-    if (!supabase || !userId) return readLocalTodos(GUEST_KEY);
-
-    const localUserTodos = readLocalTodos(`taskease_todos_${userId}`);
-    const guestTodos = readLocalTodos(GUEST_KEY);
-
-    const selectWithRepeat = "id,title,status,estimated_hours,ddl,remark,repeat_rule,repeat_until_date,priority,label,progress_percent,created_at,user_id";
-    const selectLegacy = "id,title,status,estimated_hours,ddl,remark,priority,label,progress_percent,created_at,user_id";
-
-    const shouldUseRepeatColumns = repeatColumnsSupportedRef.current !== false;
-    const primarySelect = shouldUseRepeatColumns ? selectWithRepeat : selectLegacy;
-
-    let result = await supabase
-      .from(TODO_TABLE)
-      .select(primarySelect)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-
-    // Transient auth lock conflict can happen when multiple auth requests overlap.
-    // Retry once instead of immediately falling back to local storage.
-    if (result.error && isTransientLockError(result.error)) {
-      await sleep(250);
-      result = await supabase
-        .from(TODO_TABLE)
-        .select(primarySelect)
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
-    }
-
-    if (result.error && shouldUseRepeatColumns && String(result.error.message || "").toLowerCase().includes("repeat_rule")) {
-      repeatColumnsSupportedRef.current = false;
-      result = await supabase
-        .from(TODO_TABLE)
-        .select(selectLegacy)
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
-    } else if (!result.error && shouldUseRepeatColumns) {
-      repeatColumnsSupportedRef.current = true;
-    }
-
-    const { data, error } = result;
-
-    if (error) {
-      if (!isTransientLockError(error)) {
-        notify(`${t.syncFallback} ${error.message || ""}`.trim(), true);
-      }
-      return includeLocal ? mergeTodoLists(guestTodos, localUserTodos) : [];
-    }
-
-    const cloudMapped = (Array.isArray(data) ? data : []).map(mapTodo);
-    const mergedBase = includeLocal ? mergeTodoLists(cloudMapped, guestTodos, localUserTodos) : cloudMapped;
-    const withPomodoroTotals = await withLockRetry(() => withTimeout(loadPomodoroTotalsForTodos(userId, mergedBase), OP_TIMEOUT_MS));
-    return withPomodoroTotals;
+  /** 设置会话列表的同时维护内存镜像 */
+  function applySessions(next) {
+    sessionsRef.current = Array.isArray(next) ? next : [];
+    setPomodoroSessions(sessionsRef.current);
   }
 
-  async function loadPomodoroTotalsForTodos(userId, todoList) {
-    const sessionKey = getPomodoroSessionsStorageKey(userId);
-    const tombstoneIds = await loadPomodoroTombstoneSessionIds(userId);
-    const tombstoneSet = new Set((Array.isArray(tombstoneIds) ? tombstoneIds : []).map((id) => String(id || "").trim()).filter(Boolean));
-    const localSessions = readLocalPomodoroSessions(sessionKey).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
-    if (localSessions.length > 0) {
-      return applyPomodoroTotalsFromSessions(todoList, localSessions);
-    }
-    if (!supabase || !userId) return Array.isArray(todoList) ? todoList : [];
-    const taskIds = (Array.isArray(todoList) ? todoList : [])
-      .map((x) => String(x?.id || "").trim())
-      .filter(Boolean);
-    if (taskIds.length === 0) {
-      return applyPomodoroTotals(todoList, {});
-    }
-
-    const { data, error } = await supabase
-      .from(POMODORO_SESSIONS_TABLE)
-      .select("task_id,duration_seconds")
-      .eq("user_id", userId)
-      .in("task_id", taskIds);
-
-    if (error) {
-      pushDiag("pomodoro", "session_totals_load_failed", { userId, message: String(error.message || "") }, "warn");
-      return Array.isArray(todoList) ? todoList : [];
-    }
-
-    const sessions = (Array.isArray(data) ? data : []).map(mapPomodoroSession).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
-    writeLocalPomodoroSessions(sessionKey, sessions);
-    return applyPomodoroTotalsFromSessions(todoList, sessions);
+  /** 从持久层重新读取番茄钟会话（用于「番茄钟管理」弹窗打开时刷新） */
+  async function loadPomodoroSessions() {
+    const rows = await storage.loadSessions();
+    return normalizeStoredSessions(rows);
   }
 
-  async function migrateLegacyPomodoroTotalsToSessions(userId, todoList) {
-    if (!supabase || !userId) return;
-    const candidates = (Array.isArray(todoList) ? todoList : [])
-      .map((todo) => ({
-        taskId: String(todo?.id || "").trim(),
-        totalSeconds: Math.max(0, Math.floor(Number(todo?.pomodoro_total_seconds || 0))),
-      }))
-      .filter((x) => x.taskId && x.totalSeconds > 0);
-
-    if (candidates.length === 0) return;
-
-    const taskIds = candidates.map((x) => x.taskId);
-    const { data, error } = await supabase
-      .from(POMODORO_SESSIONS_TABLE)
-      .select("task_id,duration_seconds")
-      .eq("user_id", userId)
-      .in("task_id", taskIds);
-
-    if (error) {
-      pushDiag("pomodoro", "legacy_migrate_load_failed", { userId, message: String(error.message || "") }, "warn");
-      return;
-    }
-
-    const existingTotals = {};
-    for (const row of Array.isArray(data) ? data : []) {
-      const id = String(row?.task_id || "").trim();
-      if (!id) continue;
-      existingTotals[id] = Math.max(0, Number(existingTotals[id] || 0) + Number(row?.duration_seconds || 0));
-    }
-
-    const endTs = Date.now();
-    const rows = [];
-    for (const item of candidates) {
-      const delta = item.totalSeconds - Math.max(0, Number(existingTotals[item.taskId] || 0));
-      if (delta <= 0) continue;
-      rows.push({
-        user_id: userId,
-        task_id: item.taskId,
-        duration_seconds: delta,
-        start_time: new Date(endTs - delta * 1000).toISOString(),
-        end_time: new Date(endTs).toISOString(),
-      });
-    }
-
-    if (rows.length === 0) return;
-    const insertResult = await withTimeout(supabase.from(POMODORO_SESSIONS_TABLE).insert(rows), OP_TIMEOUT_MS);
-    if (insertResult?.error) {
-      pushDiag("pomodoro", "legacy_migrate_insert_failed", { userId, message: String(insertResult.error.message || "") }, "warn");
-      return;
-    }
-    pushDiag("pomodoro", "legacy_migrate_insert_success", { userId, count: rows.length });
-  }
-
-  async function loadPomodoroSessions(userId) {
-    const sessionKey = getPomodoroSessionsStorageKey(userId);
-    const localSessions = readLocalPomodoroSessions(sessionKey);
-    if (!supabase || !userId) return localSessions;
-
-    const [{ data, error }, tombstoneIds] = await Promise.all([
-      supabase
-        .from(POMODORO_SESSIONS_TABLE)
-        .select("id,task_id,session_key,duration_seconds,start_time,end_time")
-        .eq("user_id", userId)
-        .order("start_time", { ascending: false }),
-      loadPomodoroTombstoneSessionIds(userId),
-    ]);
-
-    if (error) {
-      pushDiag("pomodoro", "sessions_load_failed", { userId, message: String(error.message || "") }, "warn");
-      return localSessions;
-    }
-
-    const tombstoneSet = new Set((Array.isArray(tombstoneIds) ? tombstoneIds : []).map((id) => String(id || "").trim()).filter(Boolean));
-    const cloudSessions = (Array.isArray(data) ? data : []).map(mapPomodoroSession).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
-    const mergedSessions = mergePomodoroSessionLists(cloudSessions, localSessions).filter((session) => !tombstoneSet.has(String(session.id || "").trim()));
-    writeLocalPomodoroSessions(sessionKey, mergedSessions);
-    return mergedSessions;
-  }
-
-  async function syncLocalPomodoroSessionsToCloud(userId) {
-    if (!supabase || !userId) return true;
-
-    const sessionKey = getPomodoroSessionsStorageKey(userId);
-    const deletedKey = getPomodoroDeletedStorageKey(userId);
-    const localSessions = readLocalPomodoroSessions(sessionKey);
-    const deletedIds = readLocalPomodoroDeletedSessionIds(deletedKey);
-    const cloudTombstoneIds = await loadCloudPomodoroTombstoneSessionIds(userId);
-    const tombstonedIds = new Set([...deletedIds, ...cloudTombstoneIds].map((id) => String(id || "").trim()).filter(Boolean));
-
-    if (localSessions.length === 0 && tombstonedIds.size === 0) {
-      return true;
-    }
-
-    let nextSessions = localSessions.filter((session) => !tombstonedIds.has(String(session.id || "").trim()));
-    nextSessions = dedupePomodoroSessionList(nextSessions);
-
-    for (let index = 0; index < nextSessions.length; index += 1) {
-      const session = nextSessions[index];
-      if (!session || !session.task_id) continue;
-
-      const sessionSyncKey = getPomodoroSessionSyncKey(session);
-      if (!session.session_key) {
-        session.session_key = sessionSyncKey;
-      }
-
-      const payload = {
-        user_id: userId,
-        task_id: session.task_id,
-        session_key: session.session_key || sessionSyncKey,
-        duration_seconds: Math.max(0, Number(session.duration_seconds || 0)),
-        start_time: session.start_time,
-        end_time: session.end_time,
-      };
-
-      if (isCloudPomodoroSessionId(session.id) && String(session.session_key || "").trim() === String(session.id || "").trim()) {
-        const updateResult = await withTimeout(
-          supabase
-            .from(POMODORO_SESSIONS_TABLE)
-            .update(payload)
-            .eq("user_id", userId)
-            .eq("id", Number(session.id)),
-          OP_TIMEOUT_MS,
-        );
-        if (updateResult?.error) {
-          const msg = String(updateResult.error.message || "").toLowerCase();
-          const blockedByRls = msg.includes("permission") || msg.includes("policy") || msg.includes("row-level");
-          if (!blockedByRls) {
-            throw new Error(updateResult.error.message || "Failed to update Pomodoro session");
-          }
-
-          const deleteResult = await withTimeout(
-            supabase
-              .from(POMODORO_SESSIONS_TABLE)
-              .delete()
-              .eq("user_id", userId)
-              .eq("id", Number(session.id)),
-            OP_TIMEOUT_MS,
-          );
-          if (deleteResult?.error) {
-            throw new Error(deleteResult.error.message || "Failed to replace Pomodoro session");
-          }
-
-          const insertAfterDelete = await withTimeout(
-            supabase
-              .from(POMODORO_SESSIONS_TABLE)
-              .insert(payload)
-              .select("id")
-              .single(),
-            OP_TIMEOUT_MS,
-          );
-          if (insertAfterDelete?.error || !insertAfterDelete?.data?.id) {
-            throw new Error(insertAfterDelete?.error?.message || "Failed to recreate Pomodoro session");
-          }
-
-          nextSessions[index] = {
-            ...session,
-            id: String(insertAfterDelete.data.id),
-            user_id: userId,
-            local_dirty: false,
-          };
-          continue;
-        }
-        nextSessions[index] = { ...session, local_dirty: false };
-        continue;
-      }
-
-      let lookupQuery = supabase
-        .from(POMODORO_SESSIONS_TABLE)
-        .select("id")
-        .eq("user_id", userId)
-        .eq("session_key", session.session_key || sessionSyncKey)
-        .limit(1);
-
-      const existingResult = await withTimeout(lookupQuery.maybeSingle(), OP_TIMEOUT_MS);
-      if (existingResult?.error) {
-        throw new Error(existingResult.error.message || "Failed to lookup Pomodoro session");
-      }
-
-      if (existingResult?.data?.id) {
-        const updateExistingResult = await withTimeout(
-          supabase
-            .from(POMODORO_SESSIONS_TABLE)
-            .update(payload)
-            .eq("user_id", userId)
-            .eq("id", Number(existingResult.data.id)),
-          OP_TIMEOUT_MS,
-        );
-        if (updateExistingResult?.error) {
-          throw new Error(updateExistingResult.error.message || "Failed to update existing Pomodoro session");
-        }
-
-        nextSessions[index] = {
-          ...session,
-          id: String(existingResult.data.id),
-          user_id: userId,
-          local_dirty: false,
-        };
-        continue;
-      }
-
-      const insertResult = await withTimeout(
-        supabase
-          .from(POMODORO_SESSIONS_TABLE)
-          .insert(payload)
-          .select("id")
-          .single(),
-        OP_TIMEOUT_MS,
-      );
-
-      if (insertResult?.error || !insertResult?.data?.id) {
-        throw new Error(insertResult?.error?.message || "Failed to insert Pomodoro session");
-      }
-
-      nextSessions[index] = {
-        ...session,
-        id: String(insertResult.data.id),
-        session_key: session.session_key || sessionSyncKey,
-        user_id: userId,
-        local_dirty: false,
-      };
-    }
-
-    if (deletedIds.length > 0) {
-      const cloudDeletedIds = deletedIds.filter((id) => isCloudPomodoroSessionId(id)).map((id) => Number(id));
-
-      if (cloudDeletedIds.length > 0) {
-        const tombstoneRows = cloudDeletedIds.map((sessionId) => ({
-          user_id: userId,
-          session_id: sessionId,
-          deleted_at: new Date().toISOString(),
-        }));
-
-        const tombstoneResult = await withTimeout(
-          supabase
-            .from(POMODORO_SESSION_TOMBSTONES_TABLE)
-            .upsert(tombstoneRows, { onConflict: "user_id,session_id" }),
-          OP_TIMEOUT_MS,
-        );
-
-        if (tombstoneResult?.error) {
-          throw new Error(tombstoneResult.error.message || "Failed to insert Pomodoro tombstones");
-        }
-
-        const deleteResult = await withTimeout(
-          supabase
-            .from(POMODORO_SESSIONS_TABLE)
-            .delete()
-            .eq("user_id", userId)
-            .in("id", cloudDeletedIds),
-          OP_TIMEOUT_MS,
-        );
-        if (deleteResult?.error) {
-          throw new Error(deleteResult.error.message || "Failed to delete Pomodoro sessions from cloud");
-        }
-      }
-
-      writeLocalPomodoroDeletedSessionIds(deletedKey, []);
-      const deletedSet = new Set(deletedIds.map((id) => String(id || "").trim()));
-      nextSessions = nextSessions.filter((session) => !deletedSet.has(String(session?.id || "").trim()));
-    }
-
-    writeLocalPomodoroSessions(sessionKey, nextSessions);
-    setPomodoroSessions(nextSessions);
-
-    if (deletedIds.length > 0 || tombstonedIds.size > 0) {
-      setTodos((prev) => {
-        const next = applyPomodoroTotalsFromSessions(prev, nextSessions);
-        writeLocalTodos(storageKey, next);
-        return next;
-      });
-    }
-
-    return true;
-  }
-
-  async function loadPreferences(userId) {
-    let data = null;
-    let error = null;
-
-    ({ data, error } = await supabase
-      .from(PREFERENCES_TABLE)
-      .select("language,clock_format,theme_mode,task_labels,auto_sync_enabled,theme_preset,custom_background")
-      .eq("user_id", userId)
-      .maybeSingle());
-
-    if (error && String(error.message || "").toLowerCase().includes("column")) {
-      ({ data } = await supabase
-        .from(PREFERENCES_TABLE)
-        .select("language,clock_format,theme_mode,task_labels,auto_sync_enabled")
-        .eq("user_id", userId)
-        .maybeSingle());
-    }
-
-    if (!data) return;
-
-    const hasLocalLang = localStorage.getItem(LANG_KEY) !== null;
-    const hasLocalClock = localStorage.getItem(CLOCK_KEY) !== null;
-    const hasLocalThemeMode = localStorage.getItem(THEME_KEY) !== null;
-    const hasLocalAutoSync = localStorage.getItem(AUTO_SYNC_KEY) !== null;
-    const hasLocalThemePreset = localStorage.getItem(THEME_PRESET_KEY) !== null;
-    const hasLocalCustomBg = localStorage.getItem(CUSTOM_BG_KEY) !== null;
-
-    if (!hasLocalLang && data.language && (data.language === "zh-CN" || data.language === "zh-TW" || data.language === "en")) {
-      setLang(data.language);
-    }
-    if (!hasLocalClock && data.clock_format && (data.clock_format === "12h" || data.clock_format === "24h")) {
-      setClockFormat(data.clock_format);
-    }
-    if (!hasLocalThemeMode && data.theme_mode && (data.theme_mode === "light" || data.theme_mode === "dark" || data.theme_mode === "system")) {
-      setThemeMode(data.theme_mode);
-    }
-    if (data.task_labels !== undefined && data.task_labels !== null) {
-      const nextLabels = parseTaskLabels(data.task_labels);
-      setTaskLabels(nextLabels);
-      try {
-        localStorage.setItem(getTaskLabelsStorageKey(userId), JSON.stringify(nextLabels));
-      } catch {
-        /* ignore */
-      }
-    }
-    if (!hasLocalAutoSync && typeof data.auto_sync_enabled === "boolean") {
-      setAutoSyncEnabled(data.auto_sync_enabled);
-    }
-    if (!hasLocalThemePreset && data.theme_preset && ["beige", "pink", "blue", "lavender", "custom-bg"].includes(data.theme_preset)) {
-      setThemePreset(data.theme_preset);
-    }
-    if (!hasLocalCustomBg && typeof data.custom_background === "string") {
-      setCustomBackground(data.custom_background);
-    }
-  }
-
-  async function savePreferences(userId, prefs) {
-    try {
-      pushDiag("prefSync", "start", { userId, keys: Object.keys(prefs || {}) });
-
-      const { error } = await withLockRetry(() =>
-        withTimeout(
-          supabase.from(PREFERENCES_TABLE).upsert(
-            {
-              user_id: userId,
-              ...prefs,
-            },
-            { onConflict: "user_id" },
-          ),
-          OP_TIMEOUT_MS,
-        ),
-      );
-
-      if (error) {
-        pushDiag("prefSync", "error", { userId, status: error.status, message: error.message || "" }, "warn");
-        return false;
-      }
-
-      pushDiag("prefSync", "success", { userId });
-      return true;
-    } catch (error) {
-      const isTimeout = String(error?.message || "") === "TIMEOUT";
-      pushDiag(
-        "prefSync",
-        isTimeout ? "timeout" : "exception",
-        { userId, error: String(error?.message || error) },
-        "warn",
-      );
-      return false;
-    }
-  }
-
-  async function saveTaskLabels(userId, labels) {
+  async function saveTaskLabels(labels) {
     try {
       const normalizedLabels = Array.isArray(labels)
         ? labels.map((l) => String(l || "").trim()).filter(Boolean)
@@ -2697,15 +1306,11 @@ export default function App() {
         .sort((a, b) => a.localeCompare(b, lang === "en" ? "en-US" : lang));
 
       setTaskLabels(mergedLabels);
-      try {
-        localStorage.setItem(getTaskLabelsStorageKey(userId), JSON.stringify(mergedLabels));
-      } catch {
-        /* ignore */
-      }
+      void persistTaskLabels(mergedLabels);
       notify(t.taskLabelsUpdated || "标签已保存", false);
       return true;
     } catch (error) {
-      pushDiag("labels", "save_error", { userId, error: String(error?.message || error) }, "warn");
+      pushDiag("labels", "save_error", { error: String(error?.message || error) }, "warn");
       notify(String(error?.message || "无法保存标签"), true);
       return false;
     }
@@ -2731,17 +1336,13 @@ export default function App() {
           local_updated_at: nowIso,
         };
       });
-      writeLocalTodos(storageKey, next);
+      void persistTodos(next);
       return next;
     });
 
     const nextLabels = taskLabels.filter((x) => getLabelKey(x) !== key);
     setTaskLabels(nextLabels);
-    try {
-      localStorage.setItem(getTaskLabelsStorageKey(user?.id), JSON.stringify(nextLabels));
-    } catch {
-      /* ignore */
-    }
+    void persistTaskLabels(nextLabels);
 
     setDraft((prev) => (getLabelKey(prev?.label) === key ? { ...prev, label: "" } : prev));
     notify(t.taskLabelDeleted || "标签已删除", false);
@@ -2767,57 +1368,8 @@ export default function App() {
     setPendingLabelDelete(null);
   }
 
-  async function loadOrCreateUsername(currentUser) {
-    const { data } = await supabase
-      .from(PROFILE_TABLE)
-      .select("username")
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
-
-    if (data?.username) {
-      setCachedUsernameByUserId(currentUser.id, data.username);
-      return data.username;
-    }
-
-    // If there is no profile row yet (common with confirm-email flow),
-    // do NOT force-write "user" into profiles.
-    // Only create profile when we have a valid candidate username.
-    const metaName = normalizeUsername(currentUser.user_metadata?.username || "");
-    if (isValidUsername(metaName)) {
-      await ensureProfile(currentUser.id, metaName);
-      setCachedUsernameByUserId(currentUser.id, metaName);
-      return metaName;
-    }
-
-    const pendingName = normalizeUsername(getPendingUsernameByEmail(currentUser.email || ""));
-    if (isValidUsername(pendingName)) {
-      await ensureProfile(currentUser.id, pendingName);
-      clearPendingUsernameByEmail(currentUser.email || "");
-      setCachedUsernameByUserId(currentUser.id, pendingName);
-      return pendingName;
-    }
-
-    return "user";
-  }
-
-  async function ensureProfile(userId, name) {
-    await supabase.from(PROFILE_TABLE).upsert(
-      {
-        user_id: userId,
-        username: name,
-      },
-      { onConflict: "user_id" },
-    );
-  }
-
-  async function isUsernameTaken(name) {
-    const { data, error } = await supabase.from(PROFILE_TABLE).select("id").eq("username", name).limit(1);
-    if (error) return false;
-    return Array.isArray(data) && data.length > 0;
-  }
-
   function syncLocal(nextTodos) {
-    writeLocalTodos(storageKey, nextTodos);
+    void persistTodos(nextTodos);
   }
 
   function resetDraft() {
@@ -2870,11 +1422,7 @@ export default function App() {
     if (!trimmed) return;
     const next = mergeTaskLabels(taskLabels, [trimmed]).sort((a, b) => a.localeCompare(b, lang === "en" ? "en-US" : lang));
     setTaskLabels(next);
-    try {
-      localStorage.setItem(getTaskLabelsStorageKey(user?.id), JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
+    void persistTaskLabels(next);
     setDraft((p) => ({ ...p, label: trimmed }));
   }
 
@@ -2894,8 +1442,6 @@ export default function App() {
     const startedAt = Date.now();
     pushDiag("taskSubmit", "submit_enter", {
       isEditing: Boolean(editingTodoId),
-      hasUser: Boolean(user),
-      hasSupabase: Boolean(supabase),
       titleLen: String(draft.title || "").trim().length,
     });
 
@@ -2912,8 +1458,6 @@ export default function App() {
         {
           elapsedMs: Date.now() - startedAt,
           isEditing: Boolean(editingTodoId),
-          hasUser: Boolean(user),
-          hasSupabase: Boolean(supabase),
         },
         "error",
       );
@@ -2995,7 +1539,6 @@ export default function App() {
 
       // Local-first mode: add task immediately to local store.
       pushDiag("taskSubmit", "local_insert", { taskId: payload.id });
-      payload.user_id = user?.id || null;
       const next = [mapTodo(payload), ...todos];
       setTodos(next);
       syncLocal(next);
@@ -3023,8 +1566,6 @@ export default function App() {
   function handleTaskSubmitProbe(stage) {
     pushDiag("taskSubmit", stage, {
       isEditing: Boolean(editingTodoId),
-      hasUser: Boolean(user),
-      hasSupabase: Boolean(supabase),
     });
   }
 
@@ -3103,7 +1644,7 @@ export default function App() {
         label: baseTodo.label || null,
         progress_percent: 0,
         created_at: new Date().toISOString(),
-        user_id: user?.id || null,
+        user_id: null,
         local_dirty: true,
         local_updated_at: new Date().toISOString(),
       };
@@ -3140,235 +1681,6 @@ export default function App() {
     await handleDelete(id);
     setConfirmDeleteOpen(false);
     closeAddModal();
-  }
-
-  async function handleLogin(event) {
-    event.preventDefault();
-    if (isLoggingIn) return;
-
-    if (!supabase) {
-      notify(t.supabaseMissing, true);
-      return;
-    }
-
-    const email = String(loginEmail || "").trim().toLowerCase();
-    if (!isValidEmail(email) || loginPassword.length < 6) {
-      notify(t.invalidLogin, true);
-      return;
-    }
-
-    setIsLoggingIn(true);
-    let error;
-    try {
-      const result = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email,
-          password: loginPassword,
-        }),
-        OP_TIMEOUT_MS,
-      );
-      error = result.error;
-    } catch (timeoutError) {
-      if (String(timeoutError?.message || "") === "TIMEOUT") {
-        notify(t.requestTimeout, true);
-        return;
-      }
-      notify(`${t.loginFailed}: ${String(timeoutError?.message || timeoutError)}`, true);
-      return;
-    } finally {
-      setIsLoggingIn(false);
-    }
-
-    if (error) {
-      notify(`${t.loginFailed}: ${error.message}`, true);
-      return;
-    }
-
-    isLogoutInProgressRef.current = false;
-    ignoreAuthEventsUntilRef.current = 0;
-
-    setIsAuthModalOpen(false);
-    setLoginEmail("");
-    setLoginPassword("");
-    notify(t.loginSuccess, false);
-  }
-
-  async function handleRegister(event) {
-    event.preventDefault();
-    if (isRegistering) return;
-
-    if (!supabase) {
-      notify(t.supabaseMissing, true);
-      return;
-    }
-
-    const uname = normalizeUsername(registerUsername);
-    const email = String(registerEmail || "").trim().toLowerCase();
-    if (!isValidUsername(uname)) {
-      notify(t.invalidUsername, true);
-      return;
-    }
-
-    if (!isValidEmail(email)) {
-      notify(t.invalidEmail, true);
-      return;
-    }
-
-    if (registerPassword.length < 6) {
-      notify(t.shortPassword, true);
-      return;
-    }
-
-    if (registerPassword !== registerConfirmPassword) {
-      notify(t.passwordMismatch, true);
-      return;
-    }
-
-    setIsRegistering(true);
-
-    let data;
-    let error;
-    try {
-      if (await isUsernameTaken(uname)) {
-        notify(t.usernameTaken, true);
-        return;
-      }
-
-      const result = await withTimeout(
-        supabase.auth.signUp({
-          email,
-          password: registerPassword,
-          options: {
-            data: {
-              username: uname,
-            },
-          },
-        }),
-        OP_TIMEOUT_MS,
-      );
-      data = result.data;
-      error = result.error;
-    } catch (timeoutError) {
-      if (String(timeoutError?.message || "") === "TIMEOUT") {
-        notify(t.requestTimeout, true);
-        return;
-      }
-      notify(`${t.registerFailed}: ${String(timeoutError?.message || timeoutError)}`, true);
-      return;
-    } finally {
-      setIsRegistering(false);
-    }
-
-    if (error) {
-      if (isAuthRateLimitError(error)) {
-        notify(t.authRateLimitHint, true);
-        return;
-      }
-      if (String(error.message || "").includes("profiles_username_check")) {
-        notify(t.usernameDbConstraintHint, true);
-        return;
-      }
-      notify(`${t.registerFailed}: ${error.message}`, true);
-      return;
-    }
-
-    const newUser = data.user;
-    if (!newUser) {
-      notify(t.registerFailed, true);
-      return;
-    }
-
-    isLogoutInProgressRef.current = false;
-    ignoreAuthEventsUntilRef.current = 0;
-
-    setPendingUsernameByEmail(email, uname);
-
-    if (data.session) {
-      await ensureProfile(newUser.id, uname);
-      clearPendingUsernameByEmail(email);
-      notify(t.registerSuccess, false);
-      setIsAuthModalOpen(false);
-      setRegisterUsername("");
-      setRegisterEmail("");
-      setRegisterPassword("");
-      setRegisterConfirmPassword("");
-      return;
-    }
-
-    setOtpEmail(email);
-    setOtpCode("");
-    setIsOtpModalOpen(true);
-    setIsAuthModalOpen(false);
-    notify(t.registerNeedEmailCfg, false);
-    setRegisterPassword("");
-    setRegisterConfirmPassword("");
-    setRegisterUsername("");
-    setRegisterEmail("");
-  }
-
-  async function handleOtpVerify(event) {
-    event.preventDefault();
-    if (isVerifyingOtp) return;
-
-    if (!supabase) {
-      notify(t.supabaseMissing, true);
-      return;
-    }
-
-    const email = String(otpEmail || "").trim().toLowerCase();
-    const token = String(otpCode || "").trim().replace(/\s/g, "");
-    if (!email || !token) {
-      notify(t.otpInvalid, true);
-      return;
-    }
-
-    setIsVerifyingOtp(true);
-
-    let data;
-    let error;
-    try {
-      const result = await withTimeout(
-        supabase.auth.verifyOtp({
-          email,
-          token,
-          type: "signup",
-        }),
-        OP_TIMEOUT_MS,
-      );
-      data = result.data;
-      error = result.error;
-    } catch (timeoutError) {
-      if (String(timeoutError?.message || "") === "TIMEOUT") {
-        notify(t.requestTimeout, true);
-        return;
-      }
-      notify(`${t.otpFailed}: ${String(timeoutError?.message || timeoutError)}`, true);
-      return;
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-
-    if (error) {
-      if (isAuthRateLimitError(error)) {
-        notify(t.authRateLimitHint, true);
-        return;
-      }
-      notify(`${t.otpFailed}: ${error.message}`, true);
-      return;
-    }
-
-    if (!data?.session) {
-      notify(t.otpFailed, true);
-      return;
-    }
-
-    isLogoutInProgressRef.current = false;
-    ignoreAuthEventsUntilRef.current = 0;
-
-    setIsOtpModalOpen(false);
-    setOtpEmail("");
-    setOtpCode("");
-    notify(t.registerVerified, false);
   }
 
   function handleStartTimer(taskId) {
@@ -3434,8 +1746,6 @@ export default function App() {
     const durationSeconds = Math.max(0, Math.floor(Number(sessionSeconds || 0)));
     if (durationSeconds < POMODORO_MIN_RECORD_SECONDS) return false;
 
-    const sessionKey = getPomodoroSessionsStorageKey(user?.id);
-    
     // Use precise timestamps, with endedAt as primary reference
     const endTs = Number.isFinite(Number(endedAt)) ? Number(endedAt) : Date.now();
     // Calculate startTs based on endTs and duration for consistency
@@ -3448,7 +1758,7 @@ export default function App() {
     const nextSession = {
       id: crypto.randomUUID(),
       session_key: crypto.randomUUID(),
-      user_id: user?.id || null,
+      user_id: null,
       task_id: taskId,
       duration_seconds: durationSeconds,
       start_time: new Date(startTimeMs).toISOString(),
@@ -3457,19 +1767,18 @@ export default function App() {
       local_updated_at: new Date().toISOString(),
     };
 
-    // Prevent duplicate sessions: check if a very similar session already exists in local storage
-    const existingSessions = readLocalPomodoroSessions(sessionKey);
+    // 防重：同一个 session_key 已存在就不再写入
+    const existingSessions = sessionsRef.current;
     const isDuplicate = existingSessions.some((session) => String(session.session_key || "").trim() === String(nextSession.session_key).trim());
-    
+
     if (isDuplicate) {
       pushDiag("pomodoro", "session_duplicate_prevented", { taskId, durationSeconds }, "warn");
       return false;
     }
 
     const sessions = [nextSession, ...existingSessions];
-    writeLocalPomodoroSessions(sessionKey, sessions);
-    removeLocalPomodoroDeletedSessionId(user?.id, nextSession.id);
-    setPomodoroSessions(sessions);
+    applySessions(sessions);
+    void persistSessions(sessions);
 
     setTodos((prev) => {
       let next = applyPomodoroTotalsFromSessions(prev, sessions);
@@ -3494,7 +1803,7 @@ export default function App() {
         }
       }
 
-      writeLocalTodos(storageKey, next);
+      void persistTodos(next);
       return next;
     });
     pushDiag("pomodoro", "session_insert_local_success", { taskId, durationSeconds });
@@ -3502,7 +1811,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!isPomodoroManageOpen || !user?.id) return;
+    if (!isPomodoroManageOpen) return;
     let cancelled = false;
 
     setIsPomodoroSessionLoading(true);
@@ -3511,15 +1820,15 @@ export default function App() {
       try {
         const loader = loadPomodoroSessionsRef.current;
         if (typeof loader !== "function") return;
-        const sessions = await loader(user.id);
+        const sessions = await loader();
         if (cancelled) return;
-        setPomodoroSessions(sessions);
+        applySessions(sessions);
         setIsPomodoroSessionLoading(false);
-        pushDiag("pomodoro", "manager_modal_refresh_success", { userId: user.id, count: sessions.length });
+        pushDiag("pomodoro", "manager_modal_refresh_success", { count: sessions.length });
       } catch (err) {
         if (cancelled) return;
         setIsPomodoroSessionLoading(false);
-        pushDiag("pomodoro", "manager_modal_refresh_error", { userId: user.id, error: String(err?.message || err) }, "warn");
+        pushDiag("pomodoro", "manager_modal_refresh_error", { error: String(err?.message || err) }, "warn");
       }
     }
 
@@ -3528,7 +1837,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [isPomodoroManageOpen, user?.id]);
+  }, [isPomodoroManageOpen]);
 
   async function handleStopTimer(nextSession = timerSession) {
     if (nextSession?.reason === "limit_reached") {
@@ -3558,8 +1867,7 @@ export default function App() {
     setIsPomodoroManageSaving(true);
     try {
       const normalizedSeconds = Math.max(0, Math.min(POMODORO_MAX_SECONDS, Math.floor(Number(totalSeconds || 0))));
-      const sessionKey = getPomodoroSessionsStorageKey(user?.id);
-      const currentSessions = readLocalPomodoroSessions(sessionKey);
+      const currentSessions = sessionsRef.current;
       const sessionToUpdate = currentSessions.find((s) => s.id === sessionId);
       if (!sessionToUpdate) return false;
 
@@ -3575,12 +1883,11 @@ export default function App() {
           : session,
       );
 
-      writeLocalPomodoroSessions(sessionKey, updatedSessions);
-      removeLocalPomodoroDeletedSessionId(user?.id, sessionId);
-      setPomodoroSessions(updatedSessions);
+      applySessions(updatedSessions);
+      void persistSessions(updatedSessions);
       setTodos((prev) => {
         const next = applyPomodoroTotalsFromSessions(prev, updatedSessions);
-        writeLocalTodos(storageKey, next);
+        void persistTodos(next);
         return next;
       });
       notify(t.pomodoroRecordUpdated, false);
@@ -3594,20 +1901,18 @@ export default function App() {
     if (!sessionId) return false;
     setIsPomodoroManageSaving(true);
     try {
-      const sessionKey = getPomodoroSessionsStorageKey(user?.id);
-      const currentSessions = readLocalPomodoroSessions(sessionKey);
+      const currentSessions = sessionsRef.current;
       const updatedSessions = currentSessions.filter((session) => session.id !== sessionId);
 
       if (updatedSessions.length === currentSessions.length) return false;
 
-      writeLocalPomodoroSessions(sessionKey, updatedSessions);
-      if (isCloudPomodoroSessionId(sessionId)) {
-        addLocalPomodoroDeletedSessionId(user?.id, sessionId);
-      }
-      setPomodoroSessions(updatedSessions);
+      applySessions(updatedSessions);
+      // 会话是物理删除：先删掉这条，再把剩余整体 upsert 回去
+      void persistSessionDeletion(sessionId);
+      void persistSessions(updatedSessions);
       setTodos((prev) => {
         const next = applyPomodoroTotalsFromSessions(prev, updatedSessions);
-        writeLocalTodos(storageKey, next);
+        void persistTodos(next);
         return next;
       });
       notify(t.pomodoroRecordDeleted, false);
@@ -3617,414 +1922,21 @@ export default function App() {
     }
   }
 
-  async function handleLogout() {
-    pushDiag("auth", "logout_click", { hasSupabase: Boolean(supabase), hasUser: Boolean(user) });
 
-    isLogoutInProgressRef.current = true;
-    ignoreAuthEventsUntilRef.current = Date.now() + 15000;
-    authSyncSeqRef.current += 1;
-
-    try {
-      if (supabase) {
-        await withTimeout(supabase.auth.signOut(), 6000);
-        pushDiag("auth", "logout_remote_success", {});
-      }
-    } catch (error) {
-      const isTimeout = String(error?.message || "") === "TIMEOUT";
-      pushDiag("auth", isTimeout ? "logout_remote_timeout" : "logout_remote_error", { error: String(error?.message || error) }, "warn");
-    }
-    // Always clear local state
-    setUser(null);
-    setUsername("");
-    setTodos(readLocalTodos(GUEST_KEY));
-    setPomodoroSessions([]);
-    setIsPomodoroSessionLoading(false);
-    setIsPomodoroManageOpen(false);
-    setIsAuthModalOpen(false);
-    previousUserIdRef.current = null;
-    autoSyncInFlightRef.current = false;
-    migrationPromptShownForUserRef.current = null;
-    setIsMigratePromptOpen(false);
-    notify('已退出登录', false);
-    pushDiag("auth", "logout_local_cleared", {});
-    return true;
+  // 持久层就绪前显示加载态：从根上杜渐「异步加载结果覆盖掉用户刚做的修改」
+  if (!storageReady) {
+    return (
+      <main
+        className="d-flex align-items-center justify-content-center"
+        style={{ minHeight: "100vh", backgroundColor: pageBg }}
+      >
+        <div className="text-center">
+          <div className="spinner-border mb-3" style={{ color: logoColor }} role="status" aria-hidden="true" />
+          <div className="small" style={{ color: logoColor }}>{t.loadingData}</div>
+        </div>
+      </main>
+    );
   }
-
-  async function handleUpdateUsername(nextUsername) {
-    if (!supabase || !user) {
-      notify(t.actionNeedLogin, true);
-      return false;
-    }
-    const uname = normalizeUsername(nextUsername);
-    if (!isValidUsername(uname)) {
-      notify(t.invalidUsername, true);
-      return false;
-    }
-
-    if (uname === username) {
-      notify(t.usernameUnchanged, true);
-      return false;
-    }
-
-    try {
-      // First try updating existing profile row.
-      let updateResult;
-      try {
-        updateResult = await withTimeout(
-          supabase
-            .from(PROFILE_TABLE)
-            .update({ username: uname })
-            .eq("user_id", user.id)
-            .select("username")
-            .maybeSingle(),
-          10000,
-        );
-      } catch (timeoutError) {
-        if (String(timeoutError?.message || "") === "TIMEOUT") {
-          notify(t.requestTimeout, true);
-          return false;
-        }
-        throw timeoutError;
-      }
-
-      const { data: updated, error: updateError } = updateResult;
-
-      if (updateError) {
-        if (updateError.code === "23505") {
-          notify(t.usernameTaken, true);
-          return false;
-        }
-        // 处理数据库约束错误
-        if (updateError.code === "23514") {
-          notify("用户名不符合数据库约束要求，请使用1-15个字符", true);
-          return false;
-        }
-        if (String(updateError.message || "").includes("profiles_username_check")) {
-          notify(t.usernameDbConstraintHint, true);
-          return false;
-        }
-        notify(`${t.registerFailed}: ${updateError.message}`, true);
-        return false;
-      }
-
-      // If no existing row was updated, insert one explicitly.
-      if (!updated) {
-        let insertResult;
-        try {
-          insertResult = await withTimeout(
-            supabase
-              .from(PROFILE_TABLE)
-              .insert({ user_id: user.id, username: uname })
-              .select("username")
-              .single(),
-            10000,
-          );
-        } catch (timeoutError) {
-          if (String(timeoutError?.message || "") === "TIMEOUT") {
-            notify(t.requestTimeout, true);
-            return false;
-          }
-          throw timeoutError;
-        }
-
-        const { data: inserted, error: insertError } = insertResult;
-
-        if (insertError) {
-          if (insertError.code === "23505") {
-            notify(t.usernameTaken, true);
-            return false;
-          }
-          // 处理数据库约束错误
-          if (insertError.code === "23514") {
-            notify("用户名不符合数据库约束要求，请使用1-15个字符", true);
-            return false;
-          }
-          if (String(insertError.message || "").includes("profiles_username_check")) {
-            notify(t.usernameDbConstraintHint, true);
-            return false;
-          }
-          notify(`${t.registerFailed}: ${insertError.message}`, true);
-          return false;
-        }
-
-        const resolved = inserted?.username || uname;
-        setUsername(resolved);
-        setCachedUsernameByUserId(user.id, resolved);
-      } else {
-        const resolved = updated.username || uname;
-        setUsername(resolved);
-        setCachedUsernameByUserId(user.id, resolved);
-      }
-
-      notify(t.updateUsernameSuccess, false);
-      return true;
-    } catch (error) {
-      // 简化错误处理，移除锁冲突检查
-      notify(`${t.registerFailed}: ${String(error?.message || error)}`, true);
-      return false;
-    }
-  }
-
-  async function handleResetPassword() {
-    if (!supabase || !user?.email) {
-      notify(t.actionNeedLogin, true);
-      return false;
-    }
-    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: window.location.origin,
-    });
-    if (error) {
-      notify(`${t.registerFailed}: ${error.message}`, true);
-      return false;
-    }
-    notify(t.resetPasswordSent, false);
-    return true;
-  }
-
-  async function performCloudSync(source = "manual") {
-    if (!supabase || !user) {
-      if (source === "manual") notify(t.actionNeedLogin, true);
-      return false;
-    }
-
-    const guard = tryAcquireSyncGuard(source);
-    if (!guard.ok) {
-      const seconds = (guard.elapsedMs / 1000).toFixed(1);
-      if (source === "manual") {
-        notify(`${t.syncBusyPrefix}: ${guard.holder} (${seconds}s)`, true);
-      }
-      pushDiag("sync", "blocked_by_guard", { source, holder: guard.holder, elapsedMs: guard.elapsedMs }, "warn");
-      return false;
-    }
-
-    if (autoSyncInFlightRef.current) {
-      pushDiag("sync", "skip_in_flight", { source }, "warn");
-      releaseSyncGuard(guard.token);
-      return false;
-    }
-
-    autoSyncInFlightRef.current = true;
-    setIsSyncing(true);
-    try {
-      const localTodos = mergeTodoLists(readLocalTodos(`taskease_todos_${user.id}`), readLocalTodos(GUEST_KEY), todos);
-      const lastSyncAt = getLastSyncAt(user.id);
-      const dirtyTodos = localTodos.filter((x) => isTodoLocallyDirtyOrNew(x, lastSyncAt));
-
-      const deletedIds = dirtyTodos
-        .filter((x) => x.status === STATUS_DELETED)
-        .map((x) => String(x.id || "").trim())
-        .filter(Boolean);
-      const syncableTodos = dirtyTodos.filter((x) => x.status !== STATUS_DELETED);
-
-      if (deletedIds.length > 0) {
-        const deleteResult = await withLockRetry(
-          () => withTimeout(
-            supabase.from(TODO_TABLE).delete().eq("user_id", user.id).in("id", deletedIds),
-            OP_TIMEOUT_MS,
-          ),
-        );
-        if (deleteResult?.error) {
-          throw new Error(deleteResult.error.message || "Failed to delete tombstones from cloud");
-        }
-      }
-
-      if (syncableTodos.length > 0) {
-        await migrateLegacyPomodoroTotalsToSessions(user.id, syncableTodos);
-        const rows = syncableTodos.map((x) => ({
-          id: x.id || crypto.randomUUID(),
-          title: String(x.title || "").trim() || "Untitled",
-          status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
-          estimated_hours: Number(x.estimated_hours ?? 0),
-          ddl: x.ddl || null,
-          remark: sanitizeRemark(x.remark) || null,
-          repeat_rule: normalizeRepeatRule(x.repeat_rule),
-          repeat_until_date: normalizeRepeatUntilDate(x.repeat_until_date) || null,
-          priority: Number(x.priority ?? 0),
-          label: x.label || null,
-          progress_percent: normalizeProgress(x.progress_percent ?? 0),
-          created_at: x.created_at || new Date().toISOString(),
-          user_id: user.id,
-        }));
-
-        const toLegacyRows = (rows) => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
-        const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
-        let useRepeatFields = shouldSendRepeatFields;
-
-        let upsertResult = await withLockRetry(
-          () => withTimeout(
-            supabase.from(TODO_TABLE).upsert(useRepeatFields ? rows : toLegacyRows(rows), { onConflict: "id" }),
-            OP_TIMEOUT_MS,
-          ),
-        );
-
-        if (upsertResult?.error && useRepeatFields && String(upsertResult.error.message || "").toLowerCase().includes("repeat_rule")) {
-          repeatColumnsSupportedRef.current = false;
-          useRepeatFields = false;
-          upsertResult = await withLockRetry(
-            () => withTimeout(
-              supabase.from(TODO_TABLE).upsert(toLegacyRows(rows), { onConflict: "id" }),
-              OP_TIMEOUT_MS,
-            ),
-          );
-        } else if (!upsertResult?.error && useRepeatFields) {
-          repeatColumnsSupportedRef.current = true;
-        }
-
-        if (upsertResult?.error) {
-          throw new Error(upsertResult.error.message || "Failed to upsert local changes to cloud");
-        }
-      }
-
-      await syncLocalPomodoroSessionsToCloud(user.id);
-
-      const cloudTodos = await withLockRetry(() => withTimeout(loadTodosForUser(user.id, { includeLocal: false }), OP_TIMEOUT_MS));
-      const localUnsynced = localTodos.filter((x) => {
-        const id = String(x.id || "").trim();
-        if (!id) return false;
-        return isTodoLocallyDirtyOrNew(x, lastSyncAt) && x.status !== STATUS_DELETED;
-      });
-      const mergedTodosBase = mergeTodoLists(cloudTodos, localUnsynced).map((todo) => {
-        if (!todo || typeof todo !== "object") return todo;
-        const cleaned = { ...todo };
-        delete cleaned.local_dirty;
-        delete cleaned.local_updated_at;
-        delete cleaned.deleted_at;
-        return cleaned;
-      });
-      const mergedTodos = await loadPomodoroTotalsForTodos(user.id, mergedTodosBase);
-      setTodos(mergedTodos);
-      writeLocalTodos(storageKey, mergedTodos);
-      setLastSyncAt(user.id, new Date().toISOString());
-
-      await savePreferences(user.id, {
-        language: lang,
-        clock_format: clockFormat,
-        theme_mode: themeMode,
-        auto_sync_enabled: autoSyncEnabled,
-        ...(source === "manual" ? { task_labels: mergedTaskLabels } : {}),
-      });
-
-      pushDiag("sync", "success", { source, count: mergedTodos.length });
-      if (source === "manual") notify(t.syncSuccess, false);
-      if (source === "auto") notify(t.autoSyncSuccessNotice, false);
-      return true;
-    } catch (error) {
-      const isTimeout = String(error?.message || "") === "TIMEOUT";
-      pushDiag("sync", isTimeout ? "timeout" : "error", { source, error: String(error?.message || error) }, "error");
-      if (source === "manual") {
-        notify(isTimeout ? t.requestTimeout : `${t.syncFailed}: ${String(error?.message || error)}`, true);
-      }
-      return false;
-    } finally {
-      autoSyncInFlightRef.current = false;
-      setIsSyncing(false);
-      releaseSyncGuard(guard.token);
-    }
-  }
-
-  async function handleManualSync() {
-    return await performCloudSync("manual");
-  }
-
-  async function handleToggleAutoSync(nextEnabled) {
-    setAutoSyncEnabled(nextEnabled);
-    if (!supabase || !user) {
-      notify(nextEnabled ? t.autoSyncEnabledNotice : t.autoSyncDisabledNotice, false);
-      return;
-    }
-
-    await savePreferences(user.id, {
-      language: lang,
-      clock_format: clockFormat,
-      theme_mode: themeMode,
-      auto_sync_enabled: nextEnabled,
-    });
-    notify(nextEnabled ? t.autoSyncEnabledNotice : t.autoSyncDisabledNotice, false);
-  }
-
-  async function migrateLocalDataToCurrentUser() {
-    if (!supabase || !user) return false;
-    const guestTodos = readLocalTodos(GUEST_KEY);
-
-    setIsMigratingLocalData(true);
-    try {
-      if (guestTodos.length > 0) {
-        await migrateLegacyPomodoroTotalsToSessions(user.id, guestTodos);
-        const rows = guestTodos.map((x) => ({
-          id: x.id || crypto.randomUUID(),
-          title: String(x.title || "").trim() || "Untitled",
-          status: x.status === STATUS_DONE ? STATUS_DONE : STATUS_PENDING,
-          estimated_hours: Number(x.estimated_hours ?? 0),
-          ddl: x.ddl || null,
-          remark: sanitizeRemark(x.remark) || null,
-          repeat_rule: normalizeRepeatRule(x.repeat_rule),
-          repeat_until_date: normalizeRepeatUntilDate(x.repeat_until_date) || null,
-          priority: Number(x.priority ?? 0),
-          label: x.label || null,
-          progress_percent: normalizeProgress(x.progress_percent ?? 0),
-          created_at: x.created_at || new Date().toISOString(),
-          user_id: user.id,
-        }));
-
-        const toLegacyRows = (rows) => rows.map(({ repeat_rule: _repeat_rule, repeat_until_date: _repeat_until_date, ...rest }) => rest);
-        const shouldSendRepeatFields = repeatColumnsSupportedRef.current !== false;
-        let useRepeatFields = shouldSendRepeatFields;
-
-        let { error } = await withTimeout(
-          supabase.from(TODO_TABLE).upsert(useRepeatFields ? rows : toLegacyRows(rows), { onConflict: "id" }),
-          OP_TIMEOUT_MS,
-        );
-
-        if (error && useRepeatFields && String(error.message || "").toLowerCase().includes("repeat_rule")) {
-          repeatColumnsSupportedRef.current = false;
-          useRepeatFields = false;
-          ({ error } = await withTimeout(
-            supabase.from(TODO_TABLE).upsert(toLegacyRows(rows), { onConflict: "id" }),
-            OP_TIMEOUT_MS,
-          ));
-        } else if (!error && useRepeatFields) {
-          repeatColumnsSupportedRef.current = true;
-        }
-
-        if (error) throw error;
-      }
-
-      await savePreferences(user.id, {
-        language: lang,
-        clock_format: clockFormat,
-        theme_mode: themeMode,
-        auto_sync_enabled: autoSyncEnabled,
-        theme_preset: themePreset,
-        custom_background: customBackground,
-      });
-
-      localStorage.removeItem(GUEST_KEY);
-      localStorage.removeItem(GUEST_LABELS_KEY);
-
-      await performCloudSync("manual");
-      setIsMigratePromptOpen(false);
-      notify(t.migrateLocalSuccess, false);
-      pushDiag("migration", "success", { userId: user.id, migratedCount: guestTodos.length });
-      return true;
-    } catch (error) {
-      pushDiag("migration", "error", { userId: user.id, error: String(error?.message || error) }, "error");
-      notify(`${t.migrateLocalFailed}: ${String(error?.message || error)}`, true);
-      return false;
-    } finally {
-      setIsMigratingLocalData(false);
-    }
-  }
-
-  const customBackgroundStyle = customBackground
-    ? {
-        backgroundImage: `url(${customBackground})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-      }
-    : {
-        background: "linear-gradient(135deg, #5f7f9f 0%, #7f5f8f 100%)",
-      };
 
   return (
     <main
@@ -4034,57 +1946,36 @@ export default function App() {
         "--te-soft-btn": themeColors.softBtn,
         "--te-soft-btn-border": themeColors.softBtnBorder,
         "--te-range-track": themeColors.activeBtn,
-        ...(isCustomBgTheme ? customBackgroundStyle : { backgroundColor: pageBg }),
+        backgroundColor: pageBg,
       }}
     >
       <div
         className="mx-auto"
         style={{
           maxWidth: "1120px",
-          backgroundColor: isCustomBgTheme ? "rgba(0, 0, 0, 0.28)" : "transparent",
-          backdropFilter: isCustomBgTheme ? "blur(6px)" : "none",
-          border: isCustomBgTheme ? "1px solid rgba(255, 255, 255, 0.35)" : "none",
-          borderRadius: isCustomBgTheme ? "16px" : "0",
-          padding: isCustomBgTheme ? "14px" : "0",
         }}
       >
         <Toast notice={notice} onClose={() => setNotice({ text: "", warning: false })} />
 
         <Header
             t={t}
-            user={user}
-            username={username}
             themeMode={themeMode}
             setThemeMode={setThemeMode}
-            themePreset={themePreset}
-            setThemePreset={setThemePreset}
-            customBackground={customBackground}
-            setCustomBackground={setCustomBackground}
             themeColors={themeColors}
-            isCustomBgTheme={isCustomBgTheme}
             lang={lang}
             setLang={setLang}
             clockFormat={clockFormat}
             setClockFormat={setClockFormat}
-            onLoginClick={(tab = "login") => {
-              setIsAuthModalOpen(true);
-              setActiveAuthTab(tab);
-            }}
-            onLogout={handleLogout}
-            onOpenProfileSettings={() => setIsProfileModalOpen(true)}
             onOpenAbout={() => setIsAboutModalOpen(true)}
             onOpenDataStats={() => setIsDataStatsModalOpen(true)}
             onOpenPomodoroManage={() => {
               setIsPomodoroManageOpen(true);
             }}
-            onManualSync={handleManualSync}
-            isSyncing={isSyncing}
-            autoSyncEnabled={autoSyncEnabled}
-            onToggleAutoSync={handleToggleAutoSync}
             logoColor={logoColor}
             pageBg={pageBg}
             resolvedTheme={resolvedTheme}
             onOpenTaskLabelsModal={() => setIsTaskLabelsModalOpen(true)}
+            onOpenDataBackup={() => setIsDataBackupOpen(true)}
           />
 
         <TaskManager
@@ -4116,36 +2007,11 @@ export default function App() {
           timerSession={timerSession}
         />
 
-        <AuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          t={t}
-          activeAuthTab={activeAuthTab}
-          setActiveAuthTab={setActiveAuthTab}
-          loginEmail={loginEmail}
-          setLoginEmail={setLoginEmail}
-          loginPassword={loginPassword}
-          setLoginPassword={setLoginPassword}
-          onLogin={handleLogin}
-          registerUsername={registerUsername}
-          setRegisterUsername={setRegisterUsername}
-          registerEmail={registerEmail}
-          setRegisterEmail={setRegisterEmail}
-          registerPassword={registerPassword}
-          setRegisterPassword={setRegisterPassword}
-          registerConfirmPassword={registerConfirmPassword}
-          setRegisterConfirmPassword={setRegisterConfirmPassword}
-          onRegister={handleRegister}
-          isLoggingIn={isLoggingIn}
-          isRegistering={isRegistering}
-          pageBg={pageBg}
-          themeColors={themeColors}
-        />
-
         <AddTaskModal
           isOpen={isAddModalOpen}
           onClose={closeAddModal}
           t={t}
+          locale={appLocale}
           draft={draft}
           setDraft={setDraft}
           onSubmit={handleTaskFormSubmit}
@@ -4187,53 +2053,15 @@ export default function App() {
           onConfirm={handleDuplicateConfirm}
         />
 
-        <ConfirmModal
-          isOpen={isMigratePromptOpen}
-          onClose={() => {
-            if (!isMigratingLocalData) setIsMigratePromptOpen(false);
-          }}
-          title={t.migrateLocalTitle}
-          message={t.migrateLocalMessage}
-          confirmLabel={
-            isMigratingLocalData ? (
-              <>
-                {t.migrateLocalConfirm}
-                <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true" />
-              </>
-            ) : (
-              t.migrateLocalConfirm
-            )
-          }
-          cancelLabel={t.cancel}
-          closeAriaLabel={t.close}
-          pageBg={pageBg}
-          onConfirm={() => {
-            if (!isMigratingLocalData) {
-              void migrateLocalDataToCurrentUser();
-            }
-          }}
-        />
-
         <PlanWorkModal
           isOpen={isPlanWorkModalOpen}
           onClose={() => setIsPlanWorkModalOpen(false)}
           t={t}
+          locale={appLocale}
           todos={todos}
           STATUS_DONE={STATUS_DONE}
           pageBg={pageBg}
           themeColors={themeColors}
-        />
-
-        <ProfileSettingsModal
-          isOpen={isProfileModalOpen}
-          onClose={() => setIsProfileModalOpen(false)}
-          t={t}
-          pageBg={pageBg}
-          themeColors={themeColors}
-          email={user?.email || ""}
-          username={username}
-          onUpdateUsername={handleUpdateUsername}
-          onResetPassword={handleResetPassword}
         />
 
         <AboutModal
@@ -4242,6 +2070,16 @@ export default function App() {
           t={t}
           pageBg={pageBg}
           repoUrl={PROJECT_REPO_URL}
+        />
+
+        <DataBackupModal
+          isOpen={isDataBackupOpen}
+          onClose={() => setIsDataBackupOpen(false)}
+          t={t}
+          pageBg={pageBg}
+          themeColors={themeColors}
+          onNotify={notify}
+          onImported={reloadFromStorage}
         />
 
         <DataStatsModal
@@ -4258,6 +2096,7 @@ export default function App() {
           isOpen={isPomodoroManageOpen}
           onClose={() => setIsPomodoroManageOpen(false)}
           t={t}
+          locale={appLocale}
           pageBg={pageBg}
           themeColors={themeColors}
           resolvedTheme={resolvedTheme}
@@ -4276,12 +2115,11 @@ export default function App() {
           onClose={() => setIsTaskLabelsModalOpen(false)}
           t={t}
           labels={mergedTaskLabels}
-          onLabelsChange={(newLabels) => saveTaskLabels(user?.id, newLabels)}
+          onLabelsChange={(newLabels) => saveTaskLabels(newLabels)}
           onRequestDeleteLabel={handleRequestDeleteTaskLabel}
           themeColors={themeColors}
           pageBg={pageBg}
           resolvedTheme={resolvedTheme}
-          isCustomBgTheme={isCustomBgTheme}
         />
 
         <ConfirmModal
@@ -4298,19 +2136,6 @@ export default function App() {
           pageBg={pageBg}
           danger
           onConfirm={confirmDeleteTaskLabelInUse}
-        />
-
-        <OtpModal
-          isOpen={isOtpModalOpen}
-          onClose={() => setIsOtpModalOpen(false)}
-          t={t}
-          otpEmail={otpEmail}
-          otpCode={otpCode}
-          setOtpCode={setOtpCode}
-          onOtpVerify={handleOtpVerify}
-          isVerifyingOtp={isVerifyingOtp}
-          pageBg={pageBg}
-          themeColors={themeColors}
         />
 
         <PomodoroTimer

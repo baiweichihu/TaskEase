@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { InputModal } from "./InputModal";
+import { DateInput } from "./DateInput";
 import { ModalShell } from "./ModalShell";
 import { getMaxRepeatUntilDate, getNextRecurringIso, normalizeDateKey } from "../utils/recurrence";
 
@@ -7,6 +8,7 @@ export function AddTaskModal({
   isOpen,
   onClose,
   t,
+  locale,
   draft,
   setDraft,
   onSubmit,
@@ -69,7 +71,7 @@ export function AddTaskModal({
     draft.repeat_rule,
   );
   const repeatPreviewLabel = repeatPreviewIso
-    ? new Date(repeatPreviewIso).toLocaleString()
+    ? new Date(repeatPreviewIso).toLocaleString(locale)
     : t.repeatNextPreviewEmpty;
 
   const labelColStyle = { minWidth: "7.5rem", fontWeight: 600 };
@@ -201,10 +203,9 @@ export function AddTaskModal({
                     ) : null}
                   </label>
                   <div className="d-flex align-items-center gap-2 flex-grow-1 flex-wrap" style={{ minWidth: "12rem" }}>
-                    <input
-                      className="form-control"
-                      type="date"
+                    <DateInput
                       value={draft.ddlDate}
+                      hint={t.datePlaceholder}
                       onChange={(e) => setDraft((p) => ({ ...p, ddlDate: e.target.value }))}
                       style={{ ...customInputStyle, minWidth: "11rem", maxWidth: "16rem" }}
                     />
@@ -213,7 +214,6 @@ export function AddTaskModal({
                       type="time"
                       step="60"
                       value={draft.ddlTime}
-                      placeholder={t.optionalPlaceholder}
                       onChange={(e) => setDraft((p) => ({ ...p, ddlTime: e.target.value }))}
                       style={{ ...customInputStyle, minWidth: "8rem", maxWidth: "10rem" }}
                     />
@@ -267,10 +267,10 @@ export function AddTaskModal({
                     <label className="mb-0 text-nowrap flex-shrink-0" style={labelColStyle}>
                       {t.repeatUntilDate}：
                     </label>
-                    <input
-                      className="form-control flex-grow-1"
-                      type="date"
+                    <DateInput
+                      className="flex-grow-1"
                       value={draft.repeat_until_date || ""}
+                      hint={t.datePlaceholder}
                       min={repeatStartDate || undefined}
                       max={repeatUntilMaxDate || undefined}
                       onChange={(e) => setDraft((p) => ({ ...p, repeat_until_date: e.target.value }))}

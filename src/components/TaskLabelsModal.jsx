@@ -11,7 +11,7 @@ export function TaskLabelsModal({
   themeColors,
   pageBg,
   resolvedTheme,
-  isCustomBgTheme = false,
+
 }) {
   const [newLabelInput, setNewLabelInput] = useState("");
   const [editingIndex, setEditingIndex] = useState(null);
@@ -130,7 +130,7 @@ export function TaskLabelsModal({
     [editingIndex, handleAddLabel, handleSaveEdit, handleCancelEdit]
   );
 
-  const textColor = resolvedTheme === "dark" || isCustomBgTheme ? "#f8f9fa" : "#212529";
+  const textColor = resolvedTheme === "dark" ? "#f8f9fa" : "#212529";
   const inputTextColor = resolvedTheme === "dark" ? "#f8f9fa" : "#2b2b2b";
 
   return (

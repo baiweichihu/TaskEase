@@ -6,6 +6,7 @@ export function PlanWorkModal({
   isOpen,
   onClose,
   t,
+  locale,
   todos,
   STATUS_DONE,
   pageBg,
@@ -124,7 +125,7 @@ export function PlanWorkModal({
                                 {s.ddl ? (
                                   <>
                                     {" · "}
-                                    {t.dueAt}: {new Date(s.ddl).toLocaleString()}
+                                    {t.dueAt}: {new Date(s.ddl).toLocaleString(locale)}
                                   </>
                                 ) : null}
                                 {s.priority > 0 ? (

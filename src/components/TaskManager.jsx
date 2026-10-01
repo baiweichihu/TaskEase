@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getAppLocale } from "../utils/locale";
 
 export function TaskManager({
   t,
@@ -28,7 +29,7 @@ export function TaskManager({
   unlabeledFilterValue,
   labelOptions,
 }) {
-  const locale = lang === "en" ? "en-US" : lang;
+  const locale = getAppLocale(lang);
   const activeTimerTaskId = timerSession?.taskId || null;
   const activeTimerDisplaySeconds = Math.max(0, Number(timerSession?.displaySeconds || 0));
 
@@ -136,12 +137,10 @@ export function TaskManager({
       if (absMs < 3600000) {
         const mins = Math.max(1, Math.ceil(absMs / 60000));
         if (lang === "en") return { label: `${sign}${mins}m`, isSubDay: true };
-        if (lang === "zh-TW") return { label: `${sign}${mins}分鐘`, isSubDay: true };
         return { label: `${sign}${mins}分钟`, isSubDay: true };
       } else {
         const hours = Math.max(1, Math.floor(absMs / 3600000));
         if (lang === "en") return { label: `${sign}${hours}h`, isSubDay: true };
-        if (lang === "zh-TW") return { label: `${sign}${hours}小時`, isSubDay: true };
         return { label: `${sign}${hours}小时`, isSubDay: true };
       }
     }
@@ -187,9 +186,9 @@ export function TaskManager({
     }
 
     const parts = [];
-    if (hours > 0) parts.push(`${hours}${lang === "zh-TW" ? "小時" : "小时"}`);
-    if (minutes > 0 || hours > 0) parts.push(`${minutes}${lang === "zh-TW" ? "分鐘" : "分"}`);
-    if (hours === 0 && minutes === 0) parts.push(`${seconds}${lang === "zh-TW" ? "秒" : "秒"}`);
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0 || hours > 0) parts.push(`${minutes}分`);
+    if (hours === 0 && minutes === 0) parts.push(`${seconds}秒`);
     return parts.join(" ");
   }
 
@@ -431,7 +430,7 @@ export function TaskManager({
           <div className="d-flex align-items-start gap-1 flex-shrink-0 pt-1">
             <span
               className="fw-bold text-body-secondary"
-              style={{ fontSize: "1.35rem", minWidth: "2.5rem", fontFamily: "Manrope, Noto Sans SC, sans-serif" }}
+              style={{ fontSize: "1.35rem", minWidth: "2.5rem", fontFamily: "var(--te-font-display)" }}
             >
               {idx + 1}
             </span>
