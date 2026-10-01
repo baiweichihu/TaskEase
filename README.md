@@ -1,159 +1,123 @@
 # TaskEase
 
+**本地优先的任务管理与番茄钟桌面应用。** 数据全部保存在你自己的电脑上——无需账号、无需联网、不上传任何内容。
+
+---
+
 ## 简体中文
 
-**TaskEase** 是一个现代化的任务清单网页应用，采用 React + Vite + Bootstrap 技术栈，提供实时日期时间看板、任务筛选、日历管理、多语言支持与 Supabase 云同步功能。
+### ✨ 这是什么
 
-### 🎯 核心特性
+TaskEase 是一个 Windows 桌面应用（Tauri 2 + React），把「任务清单」和「番茄钟」两件事做扎实：
 
-- **现代化技术栈：** React 18 + Vite 5 + Bootstrap 5 + Supabase
-- **用户认证：** 用户名/密码注册登录（内部映射至 Supabase）
-- **任务管理：** 添加、编辑、删除；丰富元数据（预估工时、截止日期、优先级、标签、备注、重复规则）
-- **自适应主题：** 浅色/深色/跟随系统，主题切换自动应用所有区域
-- **多语言支持：** 简体中文 / 繁体中文 / 英文，用户偏好持久化
-- **实时时钟：** 每秒更新的日期时间看板
-- **云端同步：** 本地优先操作，仅在手动/自动同步时与 Supabase 合并
-- **本地优先规则：** 除了点击云同步和自动同步以外，其它操作都只在本地处理，包括番茄钟时长编辑的保存
-- **日历管理：** 点击日期查看当天侧边详情，支持拖拽任务到日期格快速改期
-- **重复任务：** 支持每天 / 每周 / 每月重复，完成后自动生成下一次任务
-- **番茄钟管理：** 设置中可统一管理记录，支持修改时长和删除记录
-- **番茄钟上限：** 单任务计时最多 5 小时，达到上限自动停止并关闭计时器
-- **番茄钟数据分层：** `pomodoro_sessions` 作为会话真源，任务累计时长由会话聚合得到
-- **番茄钟进度规则：** 自动计时进度按 1% 精度更新；手动滑条仍按 10% 档位调整
-- **暂停/继续安全写入：** 结束计时时按本次会话累计增量落库，不会丢失暂停前已计时部分
-- **智能截止提示：** 截止剩余时间自动显示为天/小时/分钟，并随三种语言切换
-- **紧急截止高亮：** 未完成任务若截止不足 1 天，截止括号标签会变为红色
-- **响应式设计：** Bootstrap 5 适配各类屏幕尺寸
-- **富通知体验：** 顶部 Toast 通知条，错误/成功消息自动消失
+- **完全离线**：没有任何网络请求，首次启动即断网可用
+- **无需账号**：单机单用户，没有注册登录那一套
+- **数据是自己的**：存成一个 SQLite 文件，随时可备份、可带走
+- **体积很小**：安装包约 2.4 MB，可执行文件约 5.2 MB
 
-### 🚀 快速开始
+### 🎯 核心功能
 
-#### 前置要求
-- Node.js 18+
-- npm 或 yarn
-- Supabase 项目（可选，不登录可离线使用）
+| 功能 | 说明 |
+|---|---|
+| **任务管理** | 增删改查、完成/退回、优先级（0-10）、预估工时 |
+| **丰富元数据** | 截止日期时间、标签、备注 |
+| **重复任务** | 每天 / 每周 / 每月，支持「重复截止日期」与完成后自动生成下一次 |
+| **截止倒计时** | 自动显示天/小时/分钟，不足 1 天时截止标签变红 |
+| **智能排序** | 默认视图 / 截止排序 / 优先级排序 / 日历视图 |
+| **日历视图** | 月历网格 + 当天任务侧栏，支持**拖拽任务到日期格**快速改期 |
+| **番茄钟** | 计时、暂停继续、5 小时硬上限；会话记录可编辑时长、可删除 |
+| **进度联动** | 番茄钟停止时按实际时长累加任务进度，与预估工时联动 |
+| **自动规划** | 按可用时间窗口自动排布待办任务 |
+| **数据统计** | 累计与最近一周的完成量、预估工时、番茄钟时长 |
+| **主题** | 米黄配色，支持浅色 / 深色 / 跟随系统 |
+| **多语言** | 简体中文 / English |
+| **备份** | 一键导出/导入可读的 JSON 备份 |
 
-#### 开发环境
-```bash
-# 安装依赖
-npm install
+### 💾 数据存放与备份
 
-# 启动开发服务器 (http://localhost:5173)
-npm run dev
+**数据库位置**（桌面版）：
 
-# 构建生产版本
-npm run build
-
-# 预览生产构建
-npm run preview
+```
+%APPDATA%\com.baiweichihu.taskease\taskease.db
 ```
 
-#### 部署步骤
+即 `C:\Users\<你的用户名>\AppData\Roaming\com.baiweichihu.taskease\taskease.db`。
 
-1. **初始化 Supabase 表（首次部署）**
-   ```bash
-   # 在 Supabase SQL 编辑器中执行以下脚本
-   supabase/todos_status_migration.sql      # 任务表迁移 + 新增字段
-   supabase/user_preferences.sql            # 用户偏好表创建
-   supabase/pomodoro_sessions_migrate_from_todos_and_drop_column.sql  # 迁移旧番茄钟累计列到会话表并删除旧列
-   supabase/todos_progress_percent_constraint_1pct.sql  # 将 progress_percent 约束放宽到 1% 精度
-   supabase/pomodoro_session_tombstones.sql  # 删除标记表，防止多设备删除记录复活
-   ```
+数据库启用了 SQLite 的 **WAL 模式**，写入具备事务原子性——不会出现「写一半崩溃导致数据全丢」。
 
-   说明：数据库约束（CHECK / UNIQUE / FK 等）允许且建议通过 `supabase/*.sql` 迁移脚本调整，不需要改前端代码来“绕过”数据库约束。
+**备份方式二选一：**
 
-2. **配置 Supabase 凭证**
-   - 编辑 `src/App.jsx` 中的 `SUPABASE_URL` 和 `SUPABASE_KEY`
-   - 或使用环境变量 `.env.local`
+1. **应用内导出**（推荐）：设置菜单 → **数据与备份** → 导出备份，得到一个可读的 JSON 文件
+2. **直接复制文件**：把上面那个 `.db` 文件复制走即可（复制时请先关闭应用）
 
-3. **构建和部署**
-   ```bash
-   npm run build
-   # 部署 dist/ 文件夹到 Vercel、Netlify、GitHub Pages 等任意静态主机
-   ```
+> ⚠️ 卸载应用时数据文件**不会**被自动删除。如需彻底清理，请手动删除该目录。
 
-4. **部署到 GitHub Pages（推荐：自动部署）**
-   - 已内置 GitHub Actions 工作流：推送到 `main` 分支会自动构建并发布到 Pages。
-   - 在 GitHub 仓库中进入 `Settings > Pages`。
-   - `Build and deployment` 的 `Source` 选择 `GitHub Actions`。
-   - 首次推送后，等待 `Actions` 中 `Deploy to GitHub Pages` 成功即可访问站点。
+### 🚀 开发环境
+
+```bash
+npm install        # 安装依赖
+npm run dev        # 浏览器里跑（网页 demo 模式，数据存 localStorage）
+npm run desktop:dev   # 桌面窗口里跑（热更新，数据存 SQLite）
+```
+
+其他常用命令：
+
+```bash
+npm test           # 单元测试 + SQLite 集成测试
+npm run lint       # ESLint
+npm run check:i18n # 检查文案 key 是否有缺失或冗余
+npm run build      # 构建网页产物到 dist/
+```
+
+### 📦 打包桌面版
+
+```bash
+npm run desktop:build
+```
+
+产物：
+
+```
+src-tauri/target/release/taskease.exe                              可执行文件
+src-tauri/target/release/bundle/nsis/TaskEase_0.1.0_x64-setup.exe  安装包
+```
+
+本机构建环境的准备步骤见 [docs/BUILD.md](docs/BUILD.md)。
 
 ### 📋 项目结构
 
 ```
 TaskEase/
 ├── src/
-│   ├── App.jsx              # 主 React 组件（800+ 行）
-│   └── main.jsx             # 应用入口
-├── docs/
-│   ├── FEATURES.md          # 详细功能文档
-│   ├── SETUP.md             # 部署配置说明
-│   └── ARCHITECTURE.md       # 架构设计
-├── supabase/
-│   ├── todos_status_migration.sql        # 任务表演变脚本
-│   └── user_preferences.sql              # 用户偏好表脚本
-├── dist/                    # 生产构建输出（git 忽略）
-├── node_modules/            # 依赖包（git 忽略）
-├── index.html               # HTML 模板
-├── package.json             # 项目配置
-├── vite.config.js           # Vite 配置
-└── README.md                # 本文件
+│   ├── App.jsx                  # 应用主体：状态、业务逻辑、界面编排
+│   ├── main.jsx                 # 入口（含本地字体引入）
+│   ├── styles.css               # 全局样式与字体栈
+│   ├── planWork.js              # 自动规划算法
+│   ├── components/              # 15 个界面组件
+│   ├── storage/                 # 存储抽象层（桌面 SQLite / 网页 localStorage）
+│   │   ├── index.js             #   按运行环境选择适配器
+│   │   ├── sqliteAdapter.js     #   桌面实现
+│   │   ├── webAdapter.js        #   网页实现
+│   │   ├── sqlBuilders.js       #   纯函数 SQL 构造（有单测）
+│   │   └── backup.js            #   备份导出/导入
+│   ├── utils/                   # 纯逻辑工具（重复规则 / 番茄钟）
+│   └── tests/                   # 测试
+├── src-tauri/                   # Rust 侧（Tauri）
+│   ├── src/lib.rs               #   插件注册、单实例锁、备份文件读写命令
+│   ├── migrations/              #   数据库版本化迁移脚本
+│   ├── capabilities/            #   权限清单
+│   └── tauri.conf.json          #   应用配置
+├── docs/                        # 文档
+├── scripts/check-i18n.mjs       # 文案一致性检查
+└── TODO.md                      # 迁移工作留痕（进度与决策记录）
 ```
 
-### 🔧 功能详情
+### 🔐 隐私与安全
 
-详见 [docs/FEATURES.md](docs/FEATURES.md) 获取：
-- 用户界面各部分详解
-- 认证系统工作原理
-- 数据库架构
-- 主题系统设计
-- 本地与云端存储策略
-- 日历管理与拖拽改期
-- 本地优先 + 同步合并策略（删除优先、偏好以本地为准）
-- 重复任务自动续期
-- 国际化实现
-
-### 🗄️ 数据库
-
-**Supabase 数据库包含两个主要表：**
-
-1. **`todos`** - 任务表
-   - 字段：id, user_id, title, status, estimated_hours, ddl, priority, label, remark, completed（向后兼容）, created_at, updated_at
-   - 迁移脚本：`supabase/todos_status_migration.sql`
-   - RLS 策略：用户只能访问自己的任务
-
-2. **`user_preferences`** - 用户偏好表
-   - 字段：user_id, language, clock_format, theme_mode, created_at, updated_at
-   - 创建脚本：`supabase/user_preferences.sql`
-   - RLS 策略：用户只能读写自己的偏好
-
-### 🔐 安全特性
-
-- **行级别安全（RLS）** - Supabase 强制用户隔离
-- **认证令牌** - localStorage 存储会话，支持自动登出
-- **密码安全** - Supabase 处理密码哈希和验证
-- **离线安全** - 本地存储应用级加密（可选）
-
-### 📱 浏览器支持
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-- 移动浏览器（iOS Safari, Chrome Mobile）
-
-### 🎨 界面预览
-
-- **顶部栏：** 主题切换 + 设置下拉菜单 + 登录按钮
-- **中心看板：** 大号日期 + 实时时钟 + 任务统计
-- **任务筛选：** 全部 | 进行中 | 已完成（黄色按钮）
-- **任务列表：** 任务项卡片，支持完成/删除与快速编辑
-- **日历视图：** 支持点击日期查看当天任务侧边详情，并可拖拽调整日期
-- **特殊状态：** 所有任务完成时显示庆祝 emoji
-
-### 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
+- **零网络请求**：应用不包含任何遥测、上报或外部 CDN 依赖（字体也已本地打包）
+- **无凭据存储**：不存在账号密码，也就没有密码泄露风险
+- **备份文件读写**：路径由系统「保存/打开」对话框给出，应用没有申请额外的文件系统权限
+- **数据库权限**：仅授予 SQL 插件所需的 `load / select / execute / close`
 
 ### 📄 许可证
 
@@ -163,153 +127,65 @@ TaskEase/
 
 ## English
 
-**TaskEase** is a modern task-list web application built with React + Vite + Bootstrap, offering a live date/time dashboard, task filtering, calendar management, multi-language support, and local-first data management with optional Supabase synchronization.
+### ✨ What it is
 
-### 🎯 Key Features
+**TaskEase** is a local-first desktop app for task management and Pomodoro tracking, built with Tauri 2 + React.
 
-- **Modern Stack:** React 18 + Vite 5 + Bootstrap 5 + Supabase
-- **User Auth:** Username/password registration and login (mapped to Supabase)
-- **Task Management:** Create, edit, delete; rich metadata (estimated hours, deadline, priority, label, remarks, repeat rule)
-- **Adaptive Theme:** Light/dark/system modes; theme switches apply instantly across UI
-- **Multi-Language:** Simplified Chinese / Traditional Chinese / English; user preferences persist
-- **Live Clock:** Real-time date/time board updating every second
-- **Cloud Sync:** Local-first operations; sync with Supabase only during manual/auto sync
-- **Calendar Management:** Click a date to open side details and drag tasks to date cells for quick rescheduling
-- **Recurring Tasks:** Daily / weekly / monthly recurrence with auto-next task generation on completion
-- **Pomodoro Manager:** Manage tracked records in Settings, including duration edit and record deletion
-- **Pomodoro Hard Cap:** Per-task timer is capped at 5 hours; it auto-stops and closes when limit is reached
-- **Pomodoro Data Split:** `pomodoro_sessions` is the source of truth; per-task totals are derived by aggregating sessions
-- **Pomodoro Progress Rule:** Auto timer updates use 1% precision, while manual slider adjustments stay on 10% steps
-- **Pause/Resume Safe Persistence:** Timer stop writes the full accumulated session delta so pre-pause time is not lost
-- **Smart Due Countdown:** Remaining due time auto-switches between days/hours/minutes with full 3-language localization
-- **Urgent Due Highlight:** For unfinished tasks with less than 1 day remaining, the due-time bracket label turns red
-- **Responsive Design:** Bootstrap 5 adapts to all screen sizes
-- **Rich Notifications:** Toast notification bar at top; error/success messages auto-dismiss
+- **Fully offline** — no network requests at all; works from first launch with no internet
+- **No account** — single user, single machine, no sign-up
+- **Your data is yours** — stored as a single SQLite file you can copy or back up anytime
+- **Small** — installer ≈ 2.4 MB, executable ≈ 5.2 MB
 
-### 🚀 Quick Start
+### 🎯 Features
 
-#### Prerequisites
-- Node.js 18+
-- npm or yarn
-- Supabase project (optional; works offline without login)
+| Feature | Description |
+|---|---|
+| **Task management** | Create / edit / delete / complete, priority (0-10), estimated hours |
+| **Rich metadata** | Due date & time, labels, remarks |
+| **Recurring tasks** | Daily / weekly / monthly, with an optional recurrence end date and auto-generation on completion |
+| **Due countdown** | Auto-switches between days/hours/minutes; turns red when under one day remains |
+| **Smart sorting** | Default / by due date / by priority / calendar view |
+| **Calendar view** | Month grid with a day side panel; **drag tasks onto a date** to reschedule |
+| **Pomodoro** | Timer with pause/resume and a 5-hour hard cap; session records are editable and deletable |
+| **Progress linkage** | Stopping the timer accumulates real elapsed time into the task's progress |
+| **Auto planning** | Fits pending tasks into an available time window |
+| **Statistics** | All-time and past-week totals for completed tasks, estimated hours and Pomodoro time |
+| **Themes** | Beige palette with light / dark / follow-system modes |
+| **i18n** | Simplified Chinese / English |
+| **Backup** | Export/import a readable JSON backup |
 
-#### Development
+### 💾 Data location & backup
+
+```
+%APPDATA%\com.baiweichihu.taskease\taskease.db
+```
+
+SQLite runs in **WAL mode**, so writes are transactionally atomic.
+
+**Two ways to back up:**
+
+1. **In-app export** (recommended): Settings → **Data & Backup** → Export backup (readable JSON)
+2. **Copy the file**: copy the `.db` file above (close the app first)
+
+> ⚠️ Uninstalling does **not** delete your data. Remove the folder manually if you want a clean wipe.
+
+### 🚀 Development
+
 ```bash
-# Install dependencies
 npm install
-
-# Start dev server (http://localhost:5173)
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+npm run dev           # runs in a browser (web demo mode, localStorage)
+npm run desktop:dev   # runs in a desktop window (HMR, SQLite)
+npm test              # unit tests + SQLite integration tests
+npm run desktop:build # produces the installer and executable
 ```
 
-#### Deployment
+Build prerequisites are documented in [docs/BUILD.md](docs/BUILD.md).
 
-1. **Initialize Supabase Tables (first-time only)**
-   ```bash
-   # Run the following scripts in Supabase SQL Editor:
-   supabase/todos_status_migration.sql      # Task table evolution & new fields
-   supabase/user_preferences.sql            # User preferences table creation
-   supabase/pomodoro_sessions_migrate_from_todos_and_drop_column.sql  # Move legacy pomodoro totals into sessions and drop old column
-   ```
+### 🔐 Privacy
 
-2. **Configure Supabase Credentials**
-   - Edit `SUPABASE_URL` and `SUPABASE_KEY` in `src/App.jsx`
-   - Or use environment variables in `.env.local`
-
-3. **Build and Deploy**
-   ```bash
-   npm run build
-   # Deploy dist/ folder to Vercel, Netlify, GitHub Pages, or any static host
-   ```
-
-4. **Deploy to GitHub Pages (recommended: automatic)**
-   - This repo includes a GitHub Actions workflow that builds and deploys on pushes to `main`.
-   - In your repository, open `Settings > Pages`.
-   - Under `Build and deployment`, set `Source` to `GitHub Actions`.
-   - After your first push, wait for `Deploy to GitHub Pages` to pass in `Actions`.
-
-### 📋 Project Structure
-
-```
-TaskEase/
-├── src/
-│   ├── App.jsx              # Main React component (800+ lines)
-│   └── main.jsx             # Application entry point
-├── docs/
-│   ├── FEATURES.md          # Detailed feature documentation
-│   ├── SETUP.md             # Deployment and configuration guide
-│   └── ARCHITECTURE.md       # Architecture and design patterns
-├── supabase/
-│   ├── todos_status_migration.sql        # Task table evolution script
-│   └── user_preferences.sql              # User preferences table script
-├── dist/                    # Production build output (gitignored)
-├── node_modules/            # Dependencies (gitignored)
-├── index.html               # HTML template
-├── package.json             # Project configuration
-├── vite.config.js           # Vite configuration
-└── README.md                # This file
-```
-
-### 🔧 Feature Details
-
-See [docs/FEATURES.md](docs/FEATURES.md) for comprehensive documentation including:
-- User interface breakdown
-- Authentication system details
-- Database schema
-- Theme system design
-- Local and cloud storage strategy
-- Calendar management with side details and drag rescheduling
-- Local-first data flow with merge-on-sync (deletions take precedence; preferences use local values)
-- Recurring task automation
-- Internationalization implementation
-
-### 🗄️ Database
-
-**Supabase database contains two main tables:**
-
-1. **`todos`** - Task table
-   - Fields: id, user_id, title, status, estimated_hours, ddl, priority, label, remark, completed (backward compat), created_at, updated_at
-   - Evolution script: `supabase/todos_status_migration.sql`
-   - RLS Policy: Users can only access their own tasks
-
-2. **`user_preferences`** - User preferences table
-   - Fields: user_id, language, clock_format, theme_mode, created_at, updated_at
-   - Creation script: `supabase/user_preferences.sql`
-   - RLS Policy: Users can only read/write their own preferences
-
-### 🔐 Security Features
-
-- **Row-Level Security (RLS)** - Supabase enforces user isolation
-- **Auth Tokens** - Session stored in localStorage with auto-logout support
-- **Password Security** - Supabase handles hashing and verification
-- **Offline Safety** - Local storage with optional app-level encryption
-
-### 📱 Browser Support
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-- Mobile browsers (iOS Safari, Chrome Mobile)
-
-### 🎨 UI Preview
-
-- **Header:** Theme switcher + settings dropdown + login button
-- **Hero Dashboard:** Large date display + live clock + task statistics
-- **Task Filters:** All | Active | Completed (yellow buttons)
-- **Task List:** Task cards with complete/delete/edit actions
-- **Calendar View:** Date grid with side panel and drag-to-date scheduling
-- **Special State:** Celebration emoji when all tasks are done
-
-### 🤝 Contributing
-
-Issues and pull requests are welcome!
+- **Zero network requests** — no telemetry, no analytics, no external CDN (fonts are bundled locally)
+- **No credentials** — there are no accounts, so no password risk
+- The app requests only the SQL plugin permissions (`load / select / execute / close`)
 
 ### 📄 License
 
